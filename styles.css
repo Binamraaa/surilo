@@ -122,10 +122,12 @@ button.rec.on .dot { border-radius: 2px; animation: pulse 1s infinite; }
 .tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .tool { padding: 7px 11px; font-size: 13px; border-radius: 7px; }
 .tool-gap { width: 6px; }
-.roll { display: flex; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; background: var(--paper); max-height: 340px; overflow-y: auto; }
-.roll-labels { flex: none; position: sticky; left: 0; border-right: 1px solid var(--rule); }
+.roll { border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; background: var(--paper); }
+/* One scroller for both axes; the note names stick to the left edge. */
+.roll-scroll { max-height: 340px; overflow: auto; overscroll-behavior: contain; outline: none; -webkit-user-select: none; user-select: none; }
+.roll-inner { display: flex; width: max-content; }
+.roll-labels { flex: none; position: sticky; left: 0; z-index: 1; background: var(--paper); border-right: 1px solid var(--rule); }
 .roll-labels svg, .roll-grid svg { display: block; }
-.roll-scroll { flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; outline: none; -webkit-user-select: none; user-select: none; }
 .roll-scroll:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
 .roll .note { cursor: grab; touch-action: none; }
 .edit-count { color: var(--warm); font-weight: 700; margin-left: 4px; }

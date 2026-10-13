@@ -26,13 +26,16 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
  */
 export function createRoll(root, h) {
   root.classList.add('roll');
-  root.innerHTML = `<div class="roll-labels"></div><div class="roll-scroll" tabindex="0" aria-label="Piano roll editor. Arrow keys change the selected note."><div class="roll-grid"></div></div>`;
+  // One scroller for both axes, so the grid and the note names move together
+  // vertically while the names stay pinned to the left (position: sticky).
+  root.innerHTML = `<div class="roll-scroll" tabindex="0" aria-label="Piano roll editor. Arrow keys change the selected note."><div class="roll-inner"><div class="roll-labels"></div><div class="roll-grid"></div></div></div>`;
   const labels = root.querySelector('.roll-labels');
   const scroll = root.querySelector('.roll-scroll');
   const grid = root.querySelector('.roll-grid');
 
   let view = { notes: [], frames: [], tuning: 0, shift: 0, selected: null, flats: false };
   let geo = null;
+  let followed = null; // {id, midi} of the selected note at the last render
   let drag = null;   // live drag state
   let lastTap = { t: 0, x: 0, y: 0 };
   let holdTimer = 0;
@@ -47,17 +50,20 @@ export function createRoll(root, h) {
     let hi = Math.ceil(Math.max(mids.length ? Math.max(...mids) : 69, rawHi)) + 3;
     if (hi - lo < 14) { const c = Math.round((hi + lo) / 2); lo = c - 7; hi = c + 7; }
     const tEnd = Math.max(notes.length ? notes[notes.length - 1].end : 0, frames.length ? frames[frames.length - 1].t : 0, 2) + 0.6;
-    const avail = Math.max(240, scroll.clientWidth || 600);
+    const avail = Math.max(240, (scroll.clientWidth || 600) - LABEL_W);
     const pps = Math.max(110, avail / tEnd);
     return { lo, hi, pps, width: Math.ceil(tEnd * pps), height: (hi - lo + 1) * ROW, tEnd };
   }
   const yOf = (midi) => (geo.hi - midi) * ROW;          // top of the row
   const midiAt = (y) => geo.hi - Math.floor(y / ROW);
   const xOf = (t) => t * geo.pps;
+  const gridW = () => scroll.clientWidth - LABEL_W;   // visible grid width (labels cover the rest)
 
   function render(next) {
+    const fresh = next && (next.frames !== view.frames || next.shift !== view.shift);
     if (next) view = { ...view, ...next };
     const { notes, frames, tuning, shift, selected, flats } = view;
+    const before = geo;
     geo = layout(notes, frames, tuning, shift);
     const { lo, hi, width, height } = geo;
 
@@ -114,6 +120,27 @@ export function createRoll(root, h) {
     if (d) g += `<path d="${d}" fill="none" style="stroke:var(--ink)" stroke-width="1.2" opacity=".35" pointer-events="none"/>`;
     g += `<line class="roll-playhead" x1="-10" x2="-10" y1="0" y2="${height}" style="stroke:var(--warm)" stroke-width="2"/>`;
     grid.innerHTML = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${g}</svg>`;
+
+    if (fresh || !before) {
+      // New hum or octave switch: start at the beginning, centred on the notes.
+      const mids = notes.map((n) => n.midi).sort((a, b) => a - b);
+      const mid = mids.length ? mids[mids.length >> 1] : (lo + hi) / 2;
+      scroll.scrollLeft = 0;
+      scroll.scrollTop = Math.max(0, yOf(mid) + ROW / 2 - scroll.clientHeight / 2);
+    } else if (hi !== before.hi) {
+      // An edit widened or narrowed the range: keep what's on screen in place.
+      scroll.scrollTop += (hi - before.hi) * ROW;
+    }
+    // Follow the selected note when an edit moves it (e.g. Shift+↑ an octave).
+    const s = notes[selected];
+    if (s && followed?.id === s.id && followed.midi !== s.midi) showRow(s.midi);
+    followed = s ? { id: s.id, midi: s.midi } : null;
+  }
+
+  /** Scroll vertically, only if needed, so the row for `midi` is on screen. */
+  function showRow(midi) {
+    const y = yOf(midi);
+    if (y < scroll.scrollTop || y + ROW > scroll.scrollTop + scroll.clientHeight) scroll.scrollTop = Math.max(0, y + ROW / 2 - scroll.clientHeight / 2);
   }
 
   // ---------- Pointer editing ----------
@@ -124,7 +151,7 @@ export function createRoll(root, h) {
   };
 
   scroll.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || !grid.contains(e.target)) return;
     const p = local(e);
     const bar = e.target.closest('.note');
     if (!bar) {
@@ -262,14 +289,15 @@ export function createRoll(root, h) {
       if (!line || !geo) return;
       const x = t == null ? -10 : xOf(t);
       line.setAttribute('x1', x); line.setAttribute('x2', x);
-      if (t != null && (x < scroll.scrollLeft + 20 || x > scroll.scrollLeft + scroll.clientWidth - 20)) scroll.scrollLeft = Math.max(0, x - 40);
+      if (t != null && (x < scroll.scrollLeft + 20 || x > scroll.scrollLeft + gridW() - 20)) scroll.scrollLeft = Math.max(0, x - 40);
     },
     /** Keep the selected note in view (e.g. after picking it from the blocks). */
     reveal(i) {
       const n = view.notes[i];
       if (!n || !geo) return;
       const x = xOf(n.start);
-      if (x < scroll.scrollLeft || x > scroll.scrollLeft + scroll.clientWidth - 40) scroll.scrollLeft = Math.max(0, x - 60);
+      if (x < scroll.scrollLeft || x > scroll.scrollLeft + gridW() - 40) scroll.scrollLeft = Math.max(0, x - 60);
+      showRow(n.midi);
     },
     focus() { scroll.focus({ preventScroll: true }); },
   };
