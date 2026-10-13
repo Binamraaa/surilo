@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Hum to Notes</title>
+<meta name="description" content="Hum a melody and see the notes, where to play them on guitar and piano, the likely key, and chords that fit.">
+<meta name="theme-color" content="#2448c4">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=JetBrains+Mono:wght@400;600&family=Noto+Music&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<!--APP-->
+<main class="wrap">
+  <header class="top">
+    <h1>Hum to <span>Notes</span></h1>
+    <p>Hum a tune you know by ear. See the notes, where to play them, and chords that fit.</p>
+  </header>
+
+  <section class="panel" aria-labelledby="capture-h">
+    <div class="panel-head">
+      <h2 id="capture-h">Listen</h2>
+      <span class="label" id="mode-label">Sample loaded</span>
+    </div>
+    <div class="tuner">
+      <div class="live-note idle" id="live">
+        <div class="name" id="live-name">–</div>
+        <div class="hz" id="live-hz">hum steadily on "mmm"</div>
+        <div class="live-chords" id="live-chords" aria-live="off"></div>
+        <div class="meter" aria-hidden="true">
+          <div class="scale"></div>
+          <div class="tick" style="left:0"></div><div class="tick" style="left:25%"></div>
+          <div class="tick zero" style="left:50%"></div>
+          <div class="tick" style="left:75%"></div><div class="tick" style="left:100%"></div>
+          <div class="needle" id="needle" style="left:50%"></div>
+          <div class="cents" id="cents">flat · in tune · sharp</div>
+        </div>
+        <div class="input-meter" title="Microphone input level"><span class="label">Mic</span><div class="bar"><div id="input-level"></div></div></div>
+      </div>
+      <div class="trace-box"><canvas class="trace" id="trace" aria-label="Pitch over time"></canvas></div>
+    </div>
+    <div class="controls">
+      <button class="rec primary" id="rec" type="button"><span class="dot"></span><span id="rec-label">Start humming</span></button>
+      <label class="btn" for="file">Upload a recording<input type="file" id="file" accept="audio/*,.m4a,.wav,.mp3,.ogg,.webm,.aac"></label>
+      <select id="sample" aria-label="Try a sample hum">
+        <option value="">Try a sample hum…</option>
+      </select>
+    </div>
+    <p class="status" id="status" role="status"></p>
+  </section>
+
+  <section class="panel" aria-labelledby="notes-h">
+    <div class="panel-head">
+      <h2 id="notes-h">What you hummed</h2>
+      <div class="controls">
+        <div class="seg" role="group" aria-label="Octave">
+          <button type="button" data-oct="-1" aria-pressed="false">8va down</button>
+          <button type="button" data-oct="0" aria-pressed="true">As hummed</button>
+          <button type="button" data-oct="1" aria-pressed="false">8va up</button>
+        </div>
+      </div>
+    </div>
+    <div class="facts" id="facts"></div>
+
+    <div class="editor">
+      <div class="editor-bar">
+        <span class="label">Fix the notes</span>
+        <div class="tools" role="toolbar" aria-label="Edit the selected note">
+          <button type="button" class="tool" id="ed-up" title="Semitone up (↑)">▲ Up</button>
+          <button type="button" class="tool" id="ed-down" title="Semitone down (↓)">▼ Down</button>
+          <button type="button" class="tool" id="ed-split" title="Split the note in two">Split</button>
+          <button type="button" class="tool" id="ed-merge" title="Join with the next note">Join next</button>
+          <button type="button" class="tool" id="ed-delete" title="Delete (Del)">Delete</button>
+          <span class="tool-gap"></span>
+          <button type="button" class="tool" id="ed-undo" title="Undo (Ctrl+Z)">Undo</button>
+          <button type="button" class="tool" id="ed-reset" title="Throw away all edits">Reset</button>
+        </div>
+      </div>
+      <div class="guess-bar" id="guess" hidden>
+        <p id="guess-text"></p>
+        <button type="button" class="tool" id="guess-keep"></button>
+        <button type="button" class="tool" id="guess-undo"></button>
+      </div>
+      <div id="roll"></div>
+      <p class="hint">Drag a note up or down to fix a flat or sharp note. Drag its edges to change its length. Double-click an empty spot to add a note (press and hold on a phone). The grey line is your actual voice. Dashed notes (≈) are best guesses: you hummed between two notes, so the app picked the one that fits the tune. Tap one to check it. <span id="edit-count" class="edit-count"></span></p>
+    </div>
+
+    <div class="scroll-x"><div class="blocks" id="blocks"></div></div>
+    <div class="controls">
+      <button type="button" class="primary" id="play-notes">Play notes</button>
+      <button type="button" id="play-chords">Play with chords</button>
+      <button type="button" id="play-hum">Play my hum</button>
+      <button type="button" id="midi">Save MIDI</button>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="play-h">
+    <div class="panel-head">
+      <h2 id="play-h">Play it</h2>
+      <div class="seg" role="group" aria-label="Instrument">
+        <button type="button" data-inst="guitar" aria-pressed="true">Guitar</button>
+        <button type="button" data-inst="piano" aria-pressed="false">Piano</button>
+      </div>
+    </div>
+    <p class="hint" id="inst-hint"></p>
+    <div class="scroll-x" id="instrument"></div>
+    <div class="label">On the staff</div>
+    <div class="scroll-x" id="staff"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="chords-h">
+    <div class="panel-head">
+      <h2 id="chords-h">Chords that fit</h2>
+      <span class="label" id="key-label"></span>
+    </div>
+    <p class="hint">Tap any chord to hear it. It also lights up on the keyboard.</p>
+    <div class="label" id="note-chords-label">Chords for one note</div>
+    <div class="chords" id="note-chords"></div>
+    <div class="label">For each phrase, in order</div>
+    <div class="chords" id="progression"></div>
+    <div class="label">Other chords in this key</div>
+    <div class="chords" id="palette"></div>
+  </section>
+
+  <footer>
+    <span>Pitch detection runs on your device. Nothing is uploaded.</span>
+    <span>Best results: hum on "mmm" or "doo", one note at a time, in a quiet room.</span>
+  </footer>
+</main>
+<!--/APP-->
+<script type="module" src="src/app.js"></script>
+</body>
+</html>

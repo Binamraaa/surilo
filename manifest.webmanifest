@@ -1,0 +1,10 @@
+{
+  "name": "Hum to Notes",
+  "short_name": "Hum to Notes",
+  "description": "Hum a melody and see the notes, guitar frets, piano keys and chords that fit.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f1f3ee",
+  "theme_color": "#2448c4",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

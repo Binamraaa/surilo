@@ -1,0 +1,15 @@
+{
+  "name": "hum-to-notes",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "build": "node scripts/build-single.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  },
+  "description": "Hum a melody, see the notes on guitar, piano and staff, with key and chord suggestions.",
+  "license": "MIT"
+}
