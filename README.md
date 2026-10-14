@@ -50,6 +50,21 @@ The tests synthesise realistic hums, with vibrato, scoops into notes, detuning, 
 
 For a wider check, `node scripts/sweep.mjs` hums 522 synthetic melodies: steady singers, sloppy ones (each note off by up to ±40 cents, voice drifting by half a semitone) and tunes with notes outside their key. It reports how many come back right. On sloppy singers, best-guess notes take whole melodies right from 71% to 91%, and single notes from 93.8% to 97.9%.
 
+## Testing with real voices
+
+The synthetic sweep checks the code, but only real hums show how well it works on real voices and phone mics. To build a set of real test hums:
+
+1. Open the app with `?test=1` at the end of the address, e.g. `https://binamraaa.github.io/hum-to-notes/?test=1`. Test mode stays on on that device, including in the installed app, until you tap **Turn off** (or open it with `?test=0`).
+2. Hum a song you know well, then fix every wrong note in the editor. The notes as you leave them are the answer key.
+3. Type the song name and tap **Save as test**. On a phone this opens the share sheet: save the file to a Drive folder. On a computer it downloads.
+4. Run the report on that folder:
+
+```bash
+node scripts/real-hums.mjs "G:/My Drive/Hum to Notes tests" --misses
+```
+
+Each test is a single `.wav` file at the recording's own sample rate, with the answer key (the detected notes, your corrected notes, the mic, the phone, the tempo if the metronome was on) stored inside it as JSON. It plays like any other WAV. The report runs every file through the current code and counts each kind of mistake: a semitone off, an octave off, one note split in two, two notes merged, notes missing, and extra notes. The recordings stay out of the repo.
+
 ## Project layout
 
 ```
@@ -60,12 +75,14 @@ src/core/      pure logic: no DOM, no Web Audio, runs in Node
   rhythm.js    tempo, time signatures, beat grid, tap tempo
   theory.js    key guess, chord suggestions, guitar fingering, staff spelling
   midi.js      Standard MIDI File writer
+  wav.js       WAV writer and reader (test hums carry their answer key inside)
   demo.js      synthetic hum generator (samples and tests)
 src/audio/     mic capture, file decoding, playback synth, metronome (lookahead click scheduler)
 src/ui/        SVG/canvas views
 src/app.js     wiring
 scripts/build-single.mjs   optional: bundle into one self-contained HTML file
 scripts/sweep.mjs          accuracy sweep over hundreds of synthetic hums
+scripts/real-hums.mjs      accuracy report on real test hums saved from test mode
 ```
 
 `src/core` is kept separate on purpose. The same pitch-to-note module can later send hummed ideas into a DAW as MIDI.

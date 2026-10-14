@@ -14,6 +14,7 @@ import { playNotes, playOnce, playRecording, playSequence, stopPlayback, getCtx 
 import { blocksView, fretboardView, pianoView, staffView, drawTrace } from './ui/views.js';
 import { createRoll } from './ui/roll.js';
 import { createMetronomePanel } from './ui/metronome-panel.js';
+import { testModeOn, turnOffTestMode, testHumFile, shareOrDownload } from './ui/test-mode.js';
 import { rankModes, defaultModeId, rewriteInMode, prefersFlats } from './core/modes.js';
 
 const $ = (id) => document.getElementById(id);
@@ -38,6 +39,9 @@ const state = {
   history: createHistory(),
   tuning: 0,         // singer's offset from concert pitch, in semitones
   recording: null,   // {samples, sampleRate} for "Play my hum"
+  source: null,      // where the recording came from: 'mic', 'upload' or 'sample'
+  micLabel: null,
+  recTempo: null,    // {bpm, sig} if the metronome was running while you hummed
   octave: 0,
   instrument: 'guitar',
   active: null,      // index of the note currently sounding
@@ -99,6 +103,7 @@ function derive() {
 // ---------- Rendering ----------
 
 let roll = null;
+let metro = null;
 
 function renderRoll() {
   roll.render({
@@ -149,6 +154,18 @@ function renderAll() {
   const has = state.notes.length > 0;
   for (const id of ['play-notes', 'play-chords', 'midi']) $(id).disabled = !has;
   $('play-hum').disabled = !state.recording;
+  renderTestKit();
+}
+
+/** Test mode: can this hum be saved as a test? Say why not. */
+function renderTestKit() {
+  if ($('test-kit').hidden) return;
+  const why = !state.recording ? 'Record or upload a hum to save it as a test.'
+    : state.source === 'sample' ? 'Samples are made by the app. Record or upload a real hum to test with.'
+    : !state.detected.length ? 'Add the notes you hummed in the editor first.'
+    : '';
+  $('test-save').disabled = !!why;
+  $('test-why').textContent = why;
 }
 
 function renderFacts() {
@@ -326,6 +343,7 @@ function setStatus(msg, warn = false) {
 async function toggleRecording() {
   if (state.mic) return stopRecording();
   stopPlayback();
+  state.recTempo = metro.metronome?.running ? { bpm: metro.bpm, sig: metro.sig } : null;
   setStatus('Asking for your microphone…');
   try {
     let lastRender = 0;
@@ -378,6 +396,7 @@ function stopRecording() {
   $('rec-label').textContent = 'Start humming';
   $('mode-label').textContent = 'Your hum';
   showLive(null);
+  state.source = 'mic';
   analyseRecording(rec, 'your hum');
 }
 
@@ -421,6 +440,7 @@ async function onFile(e) {
     }
     $('mode-label').textContent = 'Uploaded';
     $('sample').value = '';
+    Object.assign(state, { source: 'upload', micLabel: file.name, recTempo: null });
     analyseRecording(rec, file.name);
   } catch {
     setStatus('That file couldn\'t be read as audio. Try a .m4a, .mp3 or .wav voice memo.', true);
@@ -433,6 +453,7 @@ function loadSample(name) {
   stopPlayback();
   const rec = synthHum(DEMO_MELODIES[name]);
   $('mode-label').textContent = `Sample · ${name}`;
+  Object.assign(state, { source: 'sample', micLabel: null, recTempo: null });
   analyseRecording(rec, `the "${name}" sample`);
 }
 
@@ -461,6 +482,27 @@ async function saveMidi() {
   a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   setStatus('Saved a MIDI file with the melody and chords. Drag it into Reaper or any DAW.');
+}
+
+async function saveTestHum() {
+  const song = $('test-song').value.trim();
+  if (!song) {
+    setStatus('Type the song name first, so the test is easy to find later.', true);
+    $('test-song').focus();
+    return;
+  }
+  // Build the file straight away: sharing only works close to the tap.
+  const file = testHumFile({
+    song, recording: state.recording, original: state.original, corrected: state.detected,
+    tuning: state.tuning, trust: state.trust, source: state.source, mic: state.micLabel, tempo: state.recTempo,
+  });
+  const how = await shareOrDownload(file);
+  const mb = (file.size / 1e6).toFixed(1);
+  setStatus({
+    shared: `Shared ${file.name} (${mb} MB). Save it in the "Hum to Notes tests" folder in Drive.`,
+    downloaded: `Downloaded ${file.name} (${mb} MB). Move it to the "Hum to Notes tests" folder in Drive.`,
+    cancelled: 'Not saved.',
+  }[how]);
 }
 
 // ---------- Editing ----------
@@ -532,7 +574,15 @@ function applyEdit(edit) {
 // ---------- Wiring ----------
 
 function init() {
-  createMetronomePanel({ getCtx });
+  metro = createMetronomePanel({ getCtx });
+  if (testModeOn()) $('test-kit').hidden = false;
+  $('test-save').addEventListener('click', saveTestHum);
+  $('test-song').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveTestHum(); } });
+  $('test-off').addEventListener('click', () => {
+    turnOffTestMode();
+    $('test-kit').hidden = true;
+    setStatus('Test mode is off. Open the app with ?test=1 to turn it back on.');
+  });
   roll = createRoll($('roll'), {
     onSelect: (i) => {
       if (i === state.selected) return;

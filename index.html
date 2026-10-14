@@ -151,6 +151,19 @@
       <button type="button" id="play-hum">Play my hum</button>
       <button type="button" id="midi">Save MIDI</button>
     </div>
+
+    <div class="test-kit" id="test-kit" hidden>
+      <div class="test-head">
+        <span class="label">Test mode</span>
+        <button type="button" class="tool" id="test-off">Turn off</button>
+      </div>
+      <p class="hint">Fix every wrong note in the editor first. The notes as you leave them become the answer key the app is graded against. Then save the hum to the <b>Hum to Notes tests</b> folder in Drive.</p>
+      <div class="test-row">
+        <input type="text" id="test-song" placeholder="Song name, e.g. Ode to Joy" autocomplete="off" enterkeyhint="done" aria-label="Song name">
+        <button type="button" class="primary" id="test-save">Save as test</button>
+      </div>
+      <p class="hint" id="test-why"></p>
+    </div>
   </section>
 
   <section class="panel" aria-labelledby="play-h">
