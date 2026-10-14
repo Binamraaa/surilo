@@ -10,9 +10,10 @@ import {
   withIds, transpose, reshape, deleteNote, addNote, splitNote, mergeWithNext, resolveGuess, indexOfId, createHistory,
 } from './core/edit.js';
 import { startMic, decodeFile } from './audio/mic.js';
-import { playNotes, playOnce, playRecording, playSequence, stopPlayback } from './audio/synth.js';
+import { playNotes, playOnce, playRecording, playSequence, stopPlayback, getCtx } from './audio/synth.js';
 import { blocksView, fretboardView, pianoView, staffView, drawTrace } from './ui/views.js';
 import { createRoll } from './ui/roll.js';
+import { createMetronomePanel } from './ui/metronome-panel.js';
 import { rankModes, defaultModeId, rewriteInMode, prefersFlats } from './core/modes.js';
 
 const $ = (id) => document.getElementById(id);
@@ -531,6 +532,7 @@ function applyEdit(edit) {
 // ---------- Wiring ----------
 
 function init() {
+  createMetronomePanel({ getCtx });
   roll = createRoll($('roll'), {
     onSelect: (i) => {
       if (i === state.selected) return;

@@ -5,7 +5,7 @@ import { midiToHz } from '../core/pitch.js';
 import { voiceChord } from '../core/theory.js';
 
 let ctx = null;
-const getCtx = () => {
+export const getCtx = () => {
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!ctx || ctx.state === 'closed') ctx = new AC();
   if (ctx.state === 'suspended') ctx.resume();

@@ -21,6 +21,43 @@
     <p>Hum a tune you know by ear. See the notes, where to play them, and chords that fit.</p>
   </header>
 
+  <section class="panel metro" id="metro" aria-labelledby="metro-h">
+    <div class="metro-head">
+      <h2 id="metro-h">Metronome</h2>
+      <button type="button" class="metro-sum" id="metro-toggle" aria-expanded="true" aria-controls="metro-body"><span id="metro-sum">90 BPM · 4/4</span><span class="chev" aria-hidden="true"></span></button>
+    </div>
+    <div class="metro-pulse">
+      <div class="beat-dots" id="metro-dots" aria-hidden="true"></div>
+      <button type="button" class="primary metro-go" id="metro-go" aria-pressed="false">Start</button>
+    </div>
+    <div class="metro-body" id="metro-body">
+      <div class="bpm-row">
+        <button type="button" class="step" id="bpm-down" aria-label="Slower">−</button>
+        <div class="bpm"><output id="bpm-val" for="bpm-slider">90</output><span class="label" id="bpm-unit">beats per minute</span></div>
+        <button type="button" class="step" id="bpm-up" aria-label="Faster">+</button>
+      </div>
+      <input type="range" id="bpm-slider" min="40" max="240" step="1" value="90" aria-label="Tempo in beats per minute">
+      <div class="metro-row">
+        <button type="button" class="tap" id="tap">Tap the beat</button>
+        <div class="seg big" role="group" aria-label="Beats in a bar">
+          <button type="button" data-sig="4/4" aria-pressed="true">4/4</button>
+          <button type="button" data-sig="3/4" aria-pressed="false">3/4</button>
+          <button type="button" data-sig="6/8" aria-pressed="false">6/8</button>
+        </div>
+      </div>
+      <div class="metro-row">
+        <button type="button" class="toggle" id="metro-sound" aria-pressed="true">Sound</button>
+        <button type="button" class="toggle" id="metro-accent" aria-pressed="true">Louder beat 1</button>
+      </div>
+      <p class="hint" id="metro-hint"></p>
+    </div>
+  </section>
+  <div class="metro-mini" id="metro-mini" hidden>
+    <button type="button" class="metro-mini-bpm" id="metro-mini-show" aria-label="Show the metronome"><b id="metro-mini-bpm">90</b> BPM</button>
+    <div class="beat-dots small" id="metro-mini-dots" aria-hidden="true"></div>
+    <button type="button" class="metro-mini-stop" id="metro-mini-stop">Stop</button>
+  </div>
+
   <section class="panel" aria-labelledby="capture-h">
     <div class="panel-head">
       <h2 id="capture-h">Listen</h2>

@@ -10,6 +10,7 @@ Made for beginner and intermediate players who can hum a tune but can't yet find
 
 ## What it does
 
+- **Metronome.** Set the tempo with big − / + buttons (hold to keep going), a slider, or by tapping the beat. Choose 4/4, 3/4 or 6/8. Beat 1 is louder, and a row of dots shows where you are in the bar, so you can turn the sound off and follow the dots. It keeps your screen awake while it runs, and a small bar stays at the top of the screen when you scroll down to practise the melody.
 - **Live tuner.** Shows the note you're humming right now, plus a needle for how sharp or flat you are.
 - **Note blocks.** Cleans up your hum and turns it into a row of notes. It smooths out vibrato and scoops, ignores breaths, and keeps repeated notes ("da-da") separate.
 - **Fix the notes.** An editable piano roll. Drag a note up or down when you hummed a bit flat or sharp, drag its edges to change its length, and add, split, join or delete notes, with undo. A faint line shows your actual voice. Every other view, playback and the MIDI file follow your edits. On a phone, tap a note to bring up a bottom bar with big Lower/Higher, Shorter/Longer, Split, Join and Delete buttons. Rows get taller and there's a zoom control.
@@ -56,10 +57,11 @@ src/core/      pure logic: no DOM, no Web Audio, runs in Node
   pitch.js     YIN pitch detector, loudness gate, buffer analysis
   notes.js     pitch frames → stable notes (smoothing, segmentation, tuning offset)
   intent.js    pick the note you meant: follows drift, weighs the key and nearby notes
+  rhythm.js    tempo, time signatures, beat grid, tap tempo
   theory.js    key guess, chord suggestions, guitar fingering, staff spelling
   midi.js      Standard MIDI File writer
   demo.js      synthetic hum generator (samples and tests)
-src/audio/     mic capture, file decoding, playback synth
+src/audio/     mic capture, file decoding, playback synth, metronome (lookahead click scheduler)
 src/ui/        SVG/canvas views
 src/app.js     wiring
 scripts/build-single.mjs   optional: bundle into one self-contained HTML file

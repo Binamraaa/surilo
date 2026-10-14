@@ -64,6 +64,59 @@ header.top p { margin: 0; color: var(--ink-soft); max-width: 46ch; }
 .label { font: 600 11px/1 var(--font-body); text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft); }
 .hint { color: var(--ink-soft); font-size: 14px; margin: 0; }
 
+/* ---- Metronome ---- */
+.metro { gap: 12px; }
+.metro-head { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+.metro-head h2 { margin-right: auto; }
+.metro-sum { min-height: 44px; font: 700 16px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.metro-sum .chev { width: 8px; height: 8px; border: solid var(--ink-soft); border-width: 0 2px 2px 0; transform: rotate(45deg) translateY(-2px); transition: transform .15s; }
+.metro-sum[aria-expanded="true"] .chev { transform: rotate(-135deg) translate(-2px, 0); }
+.metro-pulse { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.metro-go { min-height: 44px; min-width: 88px; justify-content: center; }
+.metro.running .metro-go { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.beat-dots { display: flex; align-items: center; gap: 10px; min-height: 26px; }
+.beat-dots .dot { width: 24px; height: 24px; border-radius: 50%; background: var(--rule); flex: none; }
+.beat-dots .dot.first { box-shadow: inset 0 0 0 3px var(--accent); background: transparent; }
+.beat-dots .dot.group { margin-left: 12px; }
+.beat-dots .dot.on { background: var(--ink); }
+.beat-dots .dot.first.on { background: var(--accent); }
+.metro-body { display: grid; gap: 14px; }
+.metro-body[hidden] { display: none; }
+.bpm-row { display: flex; align-items: center; justify-content: center; gap: 18px; }
+.bpm { display: grid; justify-items: center; gap: 2px; min-width: 4.2ch; }
+.bpm output { font: 700 72px/0.95 var(--font-display); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.step { width: 56px; height: 56px; justify-content: center; padding: 0; font-size: 28px; border-radius: 50%; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+#bpm-slider { width: 100%; height: 44px; margin: 0; accent-color: var(--accent); }
+.metro-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.tap { min-height: 44px; min-width: 148px; justify-content: center; touch-action: manipulation; -webkit-user-select: none; user-select: none; font-variant-numeric: tabular-nums; }
+.tap:active { background: var(--accent-wash); border-color: var(--accent); }
+.seg.big button { min-height: 44px; min-width: 56px; justify-content: center; font: 700 16px/1 var(--font-display); }
+.toggle { min-height: 44px; }
+.toggle::before { content: ""; width: 12px; height: 12px; border-radius: 50%; border: 2px solid currentColor; flex: none; }
+.toggle[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-wash); }
+.toggle[aria-pressed="true"]::before { background: var(--accent); border-color: var(--accent); }
+@media (max-width: 720px) {
+  .bpm output { font-size: 84px; }
+  .metro-row { flex-wrap: nowrap; gap: 8px; }
+  .metro-row .tap { flex: 1 1 0; min-width: 0; padding: 11px 8px; }
+  .seg.big button { min-width: 46px; padding: 8px 10px; }
+  .metro-row .toggle { flex: 1 1 0; min-width: 0; justify-content: center; padding: 11px 8px; font-size: 14px; }
+}
+
+/* Floating pill while the metronome runs and its card is off screen. */
+.metro-mini {
+  position: fixed; top: calc(8px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); z-index: 25;
+  display: flex; align-items: center; gap: 12px; padding: 6px 6px 6px 8px;
+  background: var(--sheet); border: 1px solid var(--rule); border-radius: 999px; box-shadow: 0 6px 20px rgb(0 0 0 / .14);
+}
+.metro-mini[hidden] { display: none; }
+.metro-mini .beat-dots { gap: 7px; min-height: 0; }
+.metro-mini .beat-dots .dot { width: 16px; height: 16px; }
+.metro-mini .beat-dots .dot.group { margin-left: 6px; }
+.metro-mini-bpm { border: 0; background: transparent; padding: 8px 6px; min-height: 40px; font: 400 13px/1 var(--font-body); color: var(--ink-soft); }
+.metro-mini-bpm b { font: 700 18px/1 var(--font-display); color: var(--ink); font-variant-numeric: tabular-nums; }
+.metro-mini-stop { min-height: 40px; padding: 8px 14px; }
+
 /* ---- Live tuner ---- */
 .tuner { display: grid; grid-template-columns: minmax(150px, 220px) 1fr; gap: 18px; align-items: center; }
 @media (max-width: 620px) { .tuner { grid-template-columns: 1fr; } }
