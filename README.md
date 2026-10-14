@@ -81,6 +81,10 @@ scripts/sweep.mjs          accuracy sweep over hundreds of synthetic hums
 
 Hum on "mmm" or "doo", one note at a time, in a quiet room. Leave a tiny gap between repeated notes.
 
+## Acknowledgements
+
+Built with help from [Claude](https://claude.ai), Anthropic's AI assistant, used for coding and testing.
+
 ## License
 
 MIT
