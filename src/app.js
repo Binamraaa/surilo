@@ -10,9 +10,10 @@ import {
   withIds, transpose, reshape, deleteNote, addNote, splitNote, mergeWithNext, resolveGuess, indexOfId, createHistory,
 } from './core/edit.js';
 import { startMic, decodeFile } from './audio/mic.js';
-import { playNotes, playOnce, playRecording, stopPlayback } from './audio/synth.js';
+import { playNotes, playOnce, playRecording, playSequence, stopPlayback } from './audio/synth.js';
 import { blocksView, fretboardView, pianoView, staffView, drawTrace } from './ui/views.js';
 import { createRoll } from './ui/roll.js';
+import { rankModes, defaultModeId, rewriteInMode, prefersFlats } from './core/modes.js';
 
 const $ = (id) => document.getElementById(id);
 const inArtifact = typeof window.claude === 'object' && window.claude !== null;
@@ -44,6 +45,9 @@ const state = {
   playhead: null,
   mic: null,
   trust: loadTrust(),
+  modeId: null,      // mood the user picked (null = follow the detected key)
+  tonic: null,       // home note, locked once a mood is picked
+  modes: [], mode: null,
   // derived
   notes: [], key: null, keys: [], flats: false, fingering: [], progression: [], palette: [], chordsAt: new Map(),
   noteChords: [],     // chords containing the note in focus (playing, else selected)
@@ -61,6 +65,8 @@ function setAnalysis({ frames, recording }) {
   state.recording = recording;
   state.selected = null;
   state.chordTones = [];
+  state.modeId = null;
+  state.tonic = null;
   derive();
   renderAll();
 }
@@ -71,7 +77,18 @@ function derive() {
   state.keys = guessKey(state.notes);
   state.key = state.keys[0] || null;
   state.flats = state.key ? keyUsesFlats(state.key) : false;
-  const { progression, palette } = suggestChords(state.notes, state.key);
+
+  // Moods (modes) around the home note; the chosen one supplies the chord set.
+  const tonic = state.tonic ?? state.key?.tonic;
+  const auto = defaultModeId(state.key, state.notes);
+  state.modes = tonic != null && state.notes.length ? rankModes(state.notes, tonic, state.modeId || auto) : [];
+  state.mode = state.modes.find((m) => m.mode.id === (state.modeId || auto)) || state.modes[0] || null;
+  if (state.mode && state.modeId) state.flats = prefersFlats(state.notes, tonic, state.mode.mode);
+
+  const { progression } = suggestChords(state.notes, state.key, { chords: state.mode?.chords });
+  const palette = (state.mode?.chords || [])
+    .filter((c) => c.quality !== 'dim')
+    .sort((a, b) => b.weight - a.weight || a.degree - b.degree);
   state.progression = progression;
   state.palette = palette;
   state.chordsAt = new Map(progression.map((p) => [p.firstIndex, p.chord]));
@@ -88,7 +105,17 @@ function renderRoll() {
     selected: state.selected, flats: state.flats,
   });
   const sel = state.selected != null;
-  for (const id of ['ed-up', 'ed-down', 'ed-split', 'ed-delete']) $(id).disabled = !sel;
+  for (const id of ['ed-up', 'ed-down', 'ed-split', 'ed-delete', 'ed-shorter', 'ed-longer']) $(id).disabled = !sel;
+  $('ed-prev').disabled = !state.notes.length || state.selected === 0;
+  $('ed-next').disabled = !state.notes.length || state.selected === state.notes.length - 1;
+  const cur = state.notes[state.selected];
+  $('ed-name').innerHTML = cur
+    ? `Note ${state.selected + 1}: ${midiToName(cur.midi, { flats: state.flats }).replace('#', '♯')}<small>${(cur.end - cur.start).toFixed(2)} s</small>`
+    : 'Tap a note to edit it';
+  // Phones: dock the toolbar at the bottom of the screen while a note is selected.
+  const dock = sel && matchMedia('(max-width: 720px), (pointer: coarse)').matches;
+  $('ed-tools').classList.toggle('docked', dock);
+  document.body.classList.toggle('has-dock', dock);
   $('ed-merge').disabled = !sel || state.selected >= state.notes.length - 1;
   $('ed-undo').disabled = !state.history.size;
   $('ed-reset').disabled = state.detected === state.original;
@@ -133,12 +160,14 @@ function renderFacts() {
   const tune = Math.round(state.tuning * 100);
   const fact = (label, v, small = '') => `<div class="fact"><span class="label">${label}</span><span class="v">${v}${small ? `<small>${small}</small>` : ''}</span></div>`;
   el.innerHTML = [
-    fact('Likely key', k1.name, close ? `or ${k2.name}` : ''),
+    state.modeId && state.mode
+      ? fact('Mood', state.mode.name, 'picked by you')
+      : fact('Likely key', k1.name, close ? `or ${k2.name}` : ''),
     fact('Notes', state.notes.length),
     fact('Range', `${midiToName(lo, { flats: state.flats })}–${midiToName(hi, { flats: state.flats })}`),
     fact('Your tuning', Math.abs(tune) < 8 ? 'Spot on' : `${Math.abs(tune)}¢ ${tune > 0 ? 'sharp' : 'flat'}`, Math.abs(tune) >= 8 ? 'corrected for you' : ''),
   ].join('');
-  $('key-label').textContent = state.key ? `Key of ${state.key.name}` : '';
+  $('key-label').textContent = state.mode ? `Home note ${state.mode.name.split(' ')[0]}` : '';
 }
 
 function renderBlocks() {
@@ -168,12 +197,58 @@ function renderInstrument() {
 }
 
 function renderChords() {
-  const chip = (c, sub, i, kind) => `<button type="button" class="chip" data-kind="${kind}" data-i="${i}"><b>${c.name}</b><span>${sub}</span></button>`;
+  const chip = (c, sub, i, kind) => `<button type="button" class="chip${c.signature ? ' sig' : ''}" data-kind="${kind}" data-i="${i}"><b>${c.name}</b><span>${sub}</span></button>`;
   $('progression').innerHTML = state.progression.length
     ? state.progression.map((p, i) => chip(p.chord, `${p.chord.numeral} · notes ${p.firstIndex + 1}–${p.firstIndex + p.noteCount}`, i, 'prog')).join('')
     : '<div class="empty">Chords appear once there are notes.</div>';
-  $('palette').innerHTML = state.palette.map((c, i) => chip(c, c.numeral, i, 'pal')).join('');
+  $('palette').innerHTML = state.palette.map((c, i) => chip(c, c.signature ? `${c.numeral} · signature` : c.numeral, i, 'pal')).join('');
+  $('prog-label').textContent = state.mode ? `For each phrase, in order · ${state.mode.name}` : 'For each phrase, in order';
+  $('palette-label').textContent = state.mode ? `All chords in ${state.mode.name}` : 'Other chords';
+  renderModes();
   renderNoteChords();
+}
+
+/** One card per mood: does the melody fit, what gives it its colour, its signature progression. */
+function renderModes() {
+  const chosen = state.mode?.mode.id;
+  $('modes').innerHTML = state.modes.map((r) => {
+    const sig = r.mode.prog.map((d) => r.chords[d]);
+    const fits = r.fit >= 0.999;
+    const fitLine = fits
+      ? '<span class="fit ok">✓ Fits your melody as hummed</span>'
+      : `<span class="fit change">Change ${r.clashes.join(', ')} to go this way</span>`;
+    const on = r.mode.id === chosen;
+    return `<article class="mode${on ? ' on' : ''}" aria-current="${on}">
+      <h3>${r.name}${r.mode.alt ? `<small>${r.mode.alt}</small>` : ''}</h3>
+      <p>${r.mode.mood}</p>
+      ${fitLine}
+      <div class="sig"><span>${sig.map((c) => `<b>${c.name}</b>`).join(' → ')}</span><span class="nums">${sig.map((c) => c.numeral).join(' – ')}</span></div>
+      <p class="colour"><b>${r.colourNote}</b> is the key note here: ${r.mode.charText}.${r.showsColour ? ' Your melody already uses it.' : ''}</p>
+      <div class="row">
+        <button type="button" data-act="hear" data-id="${r.mode.id}">▶ Hear it</button>
+        ${on ? '<button type="button" disabled>Using this</button>'
+          : fits ? `<button type="button" class="primary" data-act="use" data-id="${r.mode.id}">Use these chords</button>`
+          : `<button type="button" data-act="rewrite" data-id="${r.mode.id}">Rewrite melody in ${r.mode.name}</button>`}
+      </div>
+    </article>`;
+  }).join('');
+}
+
+function onModeAction(e) {
+  const btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  const r = state.modes.find((m) => m.mode.id === btn.dataset.id);
+  if (!r) return;
+  if (btn.dataset.act === 'hear') {
+    playSequence([...r.mode.prog.map((d) => voiceChord(r.chords[d])), voiceChord(r.chords[0])]);
+  } else if (btn.dataset.act === 'use') {
+    state.tonic = r.tonic;
+    state.modeId = r.mode.id;
+    derive(); renderAll();
+    setStatus(`Chords now follow ${r.name}. Press "Play with chords" to hear your melody in this mood.`);
+  } else if (btn.dataset.act === 'rewrite') {
+    applyEdit({ type: 'mode', modeId: r.mode.id, tonic: r.tonic });
+  }
 }
 
 /** Chords that contain the note playing now, or else the note you tapped. */
@@ -404,6 +479,18 @@ function applyEdit(edit) {
     case 'split': after = splitNote(before, i); break;
     case 'merge': after = mergeWithNext(before, i); break;
     case 'guess': after = resolveGuess(before, i, edit.keep); break;
+    case 'mode': {
+      const r = state.modes.find((m) => m.mode.id === edit.modeId);
+      if (!r) return;
+      const res = rewriteInMode(before, edit.tonic, r.mode);
+      after = res.notes.map((n, k) => (n === before[k] ? n : { ...n, adjusted: false }));
+      state.tonic = edit.tonic;
+      state.modeId = edit.modeId;
+      edit.changes = res.changes;
+      edit.name = r.name;
+      if (!res.changes.length) { derive(); renderAll(); return; }
+      break;
+    }
     case 'reset': after = state.original; break;
     case 'undo': after = state.history.undo() ?? before; break;
     default: return;
@@ -433,6 +520,7 @@ function applyEdit(edit) {
     add: () => 'Note added. Drag it into place.',
     split: () => 'Note split in two.',
     merge: () => 'Joined with the next note.',
+    mode: () => `Rewrote your melody in ${edit.name}: ${edit.changes.map((c) => `${c.from} → ${c.to}`).join(', ')}. Press Undo to go back.`,
     guess: () => (edit.keep ? `Kept ${midiToName(sel.midi, { flats: state.flats })}.` : `Changed to ${midiToName(sel.midi, { flats: state.flats })}, the note closest to what you hummed.`),
     reset: () => 'Back to exactly what you hummed.',
     undo: () => 'Undone.',
@@ -460,6 +548,22 @@ function init() {
   $('ed-undo').addEventListener('click', () => applyEdit({ type: 'undo' }));
   $('ed-reset').addEventListener('click', () => applyEdit({ type: 'reset' }));
   $('guess-keep').addEventListener('click', () => applyEdit({ type: 'guess', keep: true }));
+  $('ed-shorter').addEventListener('click', () => applyEdit({ type: 'reshape', dEnd: -0.1 }));
+  $('ed-longer').addEventListener('click', () => applyEdit({ type: 'reshape', dEnd: 0.1 }));
+  const step = (d) => {
+    if (!state.notes.length) return;
+    const i = state.selected == null ? 0 : Math.max(0, Math.min(state.notes.length - 1, state.selected + d));
+    state.selected = i;
+    renderRoll(); renderBlocks(); renderInstrument(); renderNoteChords();
+    roll.reveal(i);
+    playOnce([state.notes[i].midi], state.instrument);
+  };
+  $('ed-prev').addEventListener('click', () => step(-1));
+  $('ed-next').addEventListener('click', () => step(1));
+  $('ed-done').addEventListener('click', () => { state.selected = null; renderRoll(); renderBlocks(); renderInstrument(); renderNoteChords(); });
+  $('zoom-in').addEventListener('click', () => roll.zoom(1.5));
+  $('zoom-out').addEventListener('click', () => roll.zoom(1 / 1.5));
+  $('modes').addEventListener('click', onModeAction);
   $('guess-undo').addEventListener('click', () => applyEdit({ type: 'guess', keep: false }));
 
   const sel = $('sample');

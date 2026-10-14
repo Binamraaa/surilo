@@ -69,13 +69,31 @@
     <div class="editor">
       <div class="editor-bar">
         <span class="label">Fix the notes</span>
-        <div class="tools" role="toolbar" aria-label="Edit the selected note">
-          <button type="button" class="tool" id="ed-up" title="Semitone up (↑)">▲ Up</button>
-          <button type="button" class="tool" id="ed-down" title="Semitone down (↓)">▼ Down</button>
+        <div class="zoom" role="group" aria-label="Zoom">
+          <button type="button" class="tool" id="zoom-out" aria-label="Zoom out">−</button>
+          <span class="label">Zoom</span>
+          <button type="button" class="tool" id="zoom-in" aria-label="Zoom in">+</button>
+        </div>
+      </div>
+      <div class="tools" id="ed-tools" role="toolbar" aria-label="Edit the selected note">
+        <div class="ed-head">
+          <span class="ed-name" id="ed-name">Tap a note to edit it</span>
+          <button type="button" class="tool ed-done" id="ed-done">Done</button>
+        </div>
+        <div class="tool-group ed-pitch">
+          <button type="button" class="tool" id="ed-prev" title="Previous note (←)" aria-label="Previous note">◀</button>
+          <button type="button" class="tool big" id="ed-down" title="Semitone down (↓)">▼ Lower</button>
+          <button type="button" class="tool big" id="ed-up" title="Semitone up (↑)">▲ Higher</button>
+          <button type="button" class="tool" id="ed-next" title="Next note (→)" aria-label="Next note">▶</button>
+        </div>
+        <div class="tool-group">
+          <button type="button" class="tool" id="ed-shorter" title="Make shorter">Shorter</button>
+          <button type="button" class="tool" id="ed-longer" title="Make longer">Longer</button>
           <button type="button" class="tool" id="ed-split" title="Split the note in two">Split</button>
-          <button type="button" class="tool" id="ed-merge" title="Join with the next note">Join next</button>
+          <button type="button" class="tool" id="ed-merge" title="Join with the next note">Join</button>
           <button type="button" class="tool" id="ed-delete" title="Delete (Del)">Delete</button>
-          <span class="tool-gap"></span>
+        </div>
+        <div class="tool-group">
           <button type="button" class="tool" id="ed-undo" title="Undo (Ctrl+Z)">Undo</button>
           <button type="button" class="tool" id="ed-reset" title="Throw away all edits">Reset</button>
         </div>
@@ -86,7 +104,7 @@
         <button type="button" class="tool" id="guess-undo"></button>
       </div>
       <div id="roll"></div>
-      <p class="hint">Drag a note up or down to fix a flat or sharp note. Drag its edges to change its length. Double-click an empty spot to add a note (press and hold on a phone). The grey line is your actual voice. Dashed notes (≈) are best guesses: you hummed between two notes, so the app picked the one that fits the tune. Tap one to check it. <span id="edit-count" class="edit-count"></span></p>
+      <p class="hint">Drag a note up or down to fix a flat or sharp note, or tap it and use the buttons. Drag a selected note's edges to change its length. Double-click an empty spot to add a note (press and hold on a phone). The grey line is your actual voice. Dashed notes (≈) are best guesses: you hummed between two notes, so the app picked the one that fits the tune. Tap one to check it. <span id="edit-count" class="edit-count"></span></p>
     </div>
 
     <div class="scroll-x"><div class="blocks" id="blocks"></div></div>
@@ -117,12 +135,17 @@
       <h2 id="chords-h">Chords that fit</h2>
       <span class="label" id="key-label"></span>
     </div>
+
+    <div class="label">Pick a mood</div>
+    <p class="hint">Your melody can go in more than one direction. Each mood keeps the same home note but changes the chords underneath.</p>
+    <div class="scroll-x"><div class="modes" id="modes"></div></div>
+
     <p class="hint">Tap any chord to hear it. It also lights up on the keyboard.</p>
+    <div class="label" id="prog-label">For each phrase, in order</div>
+    <div class="chords" id="progression"></div>
     <div class="label" id="note-chords-label">Chords for one note</div>
     <div class="chords" id="note-chords"></div>
-    <div class="label">For each phrase, in order</div>
-    <div class="chords" id="progression"></div>
-    <div class="label">Other chords in this key</div>
+    <div class="label" id="palette-label">Other chords in this key</div>
     <div class="chords" id="palette"></div>
   </section>
 

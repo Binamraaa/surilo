@@ -6,12 +6,19 @@
 //   drag a bar's edge      → change its length
 //   double-click / tap-hold empty space → add a note
 //   keys: ↑↓ semitone, Shift+↑↓ octave, ←→ select previous/next, Delete, Ctrl+Z
+//
+// On touch screens rows are taller, a touch that starts on a note never scrolls
+// the page (so drags work), edges only resize once a note is selected (so a
+// sloppy finger doesn't resize by accident), and each semitone step buzzes.
+// Never re-render during pointerdown: replacing the touched element makes mobile
+// browsers lose the touch and scroll the page instead. Selection happens on release.
 
 import { midiToName } from '../core/notes.js';
 
-const ROW = 18;          // px per semitone
 const LABEL_W = 44;      // px for the note-name column
-const EDGE = 9;          // px grab zone for resizing
+const isTouchFirst = () => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+let ROW = 18;            // px per semitone (taller on touch screens; set per render)
+let EDGE = 9;            // px grab zone for resizing
 const LOCK = 6;          // px of movement before a drag picks an axis
 const BLACK = [1, 3, 6, 8, 10];
 
@@ -33,7 +40,7 @@ export function createRoll(root, h) {
   const scroll = root.querySelector('.roll-scroll');
   const grid = root.querySelector('.roll-grid');
 
-  let view = { notes: [], frames: [], tuning: 0, shift: 0, selected: null, flats: false };
+  let view = { notes: [], frames: [], tuning: 0, shift: 0, selected: null, flats: false, zoom: 1 };
   let geo = null;
   let followed = null; // {id, midi} of the selected note at the last render
   let drag = null;   // live drag state
@@ -51,7 +58,7 @@ export function createRoll(root, h) {
     if (hi - lo < 14) { const c = Math.round((hi + lo) / 2); lo = c - 7; hi = c + 7; }
     const tEnd = Math.max(notes.length ? notes[notes.length - 1].end : 0, frames.length ? frames[frames.length - 1].t : 0, 2) + 0.6;
     const avail = Math.max(240, (scroll.clientWidth || 600) - LABEL_W);
-    const pps = Math.max(110, avail / tEnd);
+    const pps = Math.max(isTouchFirst() ? 150 : 110, avail / tEnd) * view.zoom;
     return { lo, hi, pps, width: Math.ceil(tEnd * pps), height: (hi - lo + 1) * ROW, tEnd };
   }
   const yOf = (midi) => (geo.hi - midi) * ROW;          // top of the row
@@ -64,6 +71,9 @@ export function createRoll(root, h) {
     if (next) view = { ...view, ...next };
     const { notes, frames, tuning, shift, selected, flats } = view;
     const before = geo;
+    const touch = isTouchFirst();
+    ROW = touch ? 30 : 18;
+    EDGE = touch ? 18 : 9;
     geo = layout(notes, frames, tuning, shift);
     const { lo, hi, width, height } = geo;
 
@@ -111,8 +121,8 @@ export function createRoll(root, h) {
       const stroke = n.edited ? 'var(--warm)' : 'var(--accent)';
       g += `<g class="note" data-i="${i}">
         <rect x="${x}" y="${y}" width="${w}" height="${ROW - 2}" rx="3" style="fill:${fill};stroke:${stroke}" stroke-width="${sel || n.edited || n.adjusted ? 2 : 1.2}"${n.adjusted ? ' stroke-dasharray="4 3"' : ''}/>
-        ${w > 30 ? `<text x="${x + 5}" y="${y + ROW - 6}" font-size="11" font-weight="700" style="fill:${sel ? 'var(--accent-ink)' : 'var(--accent)'}" pointer-events="none">${esc(midiToName(n.midi, { flats }))}</text>` : ''}
-        ${off && w > 64 ? `<text x="${x + w - 4}" y="${y + ROW - 6}" text-anchor="end" font-size="9" style="fill:var(--warm)" pointer-events="none">${n.cents > 0 ? '+' : '−'}${Math.abs(n.cents)}¢</text>` : ''}
+        ${w > 30 ? `<text x="${x + 5}" y="${y + ROW / 2 + 4}" font-size="${ROW > 20 ? 13 : 11}" font-weight="700" style="fill:${sel ? 'var(--accent-ink)' : 'var(--accent)'}" pointer-events="none">${esc(midiToName(n.midi, { flats }))}</text>` : ''}
+        ${off && w > 64 ? `<text x="${x + w - 4}" y="${y + ROW / 2 + 4}" text-anchor="end" font-size="9" style="fill:var(--warm)" pointer-events="none">${n.cents > 0 ? '+' : '−'}${Math.abs(n.cents)}¢</text>` : ''}
         ${sel ? `<rect x="${x}" y="${y}" width="4" height="${ROW - 2}" style="fill:var(--accent-ink)" opacity=".7" pointer-events="none"/><rect x="${x + w - 4}" y="${y}" width="4" height="${ROW - 2}" style="fill:var(--accent-ink)" opacity=".7" pointer-events="none"/>` : ''}
       </g>`;
     });
@@ -168,11 +178,12 @@ export function createRoll(root, h) {
     const i = Number(bar.dataset.i);
     const n = view.notes[i];
     const x0 = xOf(n.start), x1 = xOf(n.end);
-    const edge = Math.min(EDGE, (x1 - x0) / 3);
+    const canResize = e.pointerType !== 'touch' || view.selected === i;
+    const edge = canResize ? Math.min(EDGE, (x1 - x0) / 3) : 0;
     const mode = p.x - x0 < edge ? 'start' : x1 - p.x < edge ? 'end' : 'body';
     drag = { i, mode, p0: p, axis: mode === 'body' ? null : 'x', semis: 0, dt: 0, moved: false, wasSelected: view.selected === i };
     scroll.setPointerCapture(e.pointerId);
-    if (view.selected !== i) h.onSelect(i);
+    // Don't select (re-render) yet; see the note at the top. Select on release.
     e.preventDefault();
   });
 
@@ -203,6 +214,7 @@ export function createRoll(root, h) {
       if (semis !== drag.semis) {
         drag.semis = semis;
         h.onPreview(n.midi + semis);
+        try { navigator.vibrate?.(8); } catch { /* not supported */ }
         preview();
       }
     } else {
@@ -229,7 +241,7 @@ export function createRoll(root, h) {
       if (k === 2) r.setAttribute('x', x + w - 4);
     });
     bar.querySelectorAll('text').forEach((t, k) => {
-      t.setAttribute('y', y + ROW - 6);
+      t.setAttribute('y', y + ROW / 2 + 4);
       if (k === 0) { t.setAttribute('x', x + 5); t.textContent = midiToName(ghost.midi, { flats: view.flats }); }
       else t.remove(); // the "off by N cents" tag no longer applies
     });
@@ -243,9 +255,10 @@ export function createRoll(root, h) {
     if (!d.moved) {
       // A plain tap on an already-selected note deselects it; any tap plays it.
       h.onPreview(view.notes[d.i].midi);
-      if (d.wasSelected) h.onSelect(null);
+      h.onSelect(d.wasSelected ? null : d.i);
       return;
     }
+    if (!d.wasSelected) h.onSelect(d.i);
     if (d.axis === 'y' && d.semis) h.onEdit({ type: 'transpose', i: d.i, semis: d.semis });
     else if (d.axis === 'x' && d.dt) {
       if (d.mode === 'body') h.onEdit({ type: 'reshape', i: d.i, dStart: d.dt, dEnd: d.dt });
@@ -257,6 +270,13 @@ export function createRoll(root, h) {
   scroll.addEventListener('pointercancel', () => { drag = null; clearTimeout(holdTimer); render(); });
 
   scroll.addEventListener('dblclick', (e) => e.preventDefault());
+
+  // Touch: a finger that lands on a note edits it instead of scrolling the page.
+  // (Pointer events still fire; cancelling touchstart only stops the scroll gesture.)
+  root.addEventListener('touchstart', (e) => {
+    if (e.target.closest?.('.note')) e.preventDefault();
+  }, { passive: false, capture: true });
+  root.addEventListener('touchmove', (e) => { if (drag) e.preventDefault(); }, { passive: false, capture: true });
 
   // ---------- Keyboard ----------
   scroll.addEventListener('keydown', (e) => {
@@ -298,6 +318,14 @@ export function createRoll(root, h) {
       const x = xOf(n.start);
       if (x < scroll.scrollLeft || x > scroll.scrollLeft + gridW() - 40) scroll.scrollLeft = Math.max(0, x - 60);
       showRow(n.midi);
+    },
+    /** Zoom time in or out (pinch-free zoom for phones), keeping the centre in place. */
+    zoom(factor) {
+      const z = Math.max(0.5, Math.min(4, view.zoom * factor));
+      if (z === view.zoom || !geo) return;
+      const mid = (scroll.scrollLeft + gridW() / 2) / geo.pps;
+      render({ zoom: z });
+      scroll.scrollLeft = Math.max(0, mid * geo.pps - gridW() / 2);
     },
     focus() { scroll.focus({ preventScroll: true }); },
   };

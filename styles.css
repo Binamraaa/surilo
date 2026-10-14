@@ -119,12 +119,35 @@ button.rec.on .dot { border-radius: 2px; animation: pulse 1s infinite; }
 /* ---- Piano-roll editor ---- */
 .editor { display: grid; gap: 8px; min-width: 0; }
 .editor-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
-.tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.tool { padding: 7px 11px; font-size: 13px; border-radius: 7px; }
-.tool-gap { width: 6px; }
+.zoom { display: inline-flex; align-items: center; gap: 6px; }
+.zoom .tool { width: 36px; justify-content: center; padding: 6px 0; font-size: 17px; }
+.tools { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.ed-head { display: flex; align-items: center; gap: 10px; }
+.ed-name { font: 700 15px/1.2 var(--font-display); min-width: 7.5em; }
+.ed-name small { font: 400 12px var(--font-mono); color: var(--ink-soft); margin-left: 4px; }
+.ed-done { display: none; }
+.tool-group { display: flex; flex-wrap: wrap; gap: 6px; }
+.tool { padding: 7px 11px; font-size: 13px; border-radius: 7px; justify-content: center; }
+
+/* On phones, the toolbar docks to the bottom of the screen while a note is selected. */
+.tools.docked {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  background: var(--sheet); border-top: 1px solid var(--rule);
+  box-shadow: 0 -8px 24px rgb(0 0 0 / .12);
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  display: grid; gap: 8px;
+}
+.tools.docked .ed-head { justify-content: space-between; }
+.tools.docked .ed-done { display: inline-flex; }
+.tools.docked .tool-group { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.tools.docked .ed-pitch { grid-template-columns: 1fr 2fr 2fr 1fr; }
+.tools.docked .tool-group:last-child { grid-template-columns: 1fr 1fr; }
+.tools.docked .tool { min-height: 44px; font-size: 14px; padding: 8px 4px; }
+.tools.docked .tool.big { font-size: 16px; font-weight: 700; }
+body.has-dock { padding-bottom: 230px; }
 .roll { border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; background: var(--paper); }
 /* One scroller for both axes; the note names stick to the left edge. */
-.roll-scroll { max-height: 340px; overflow: auto; overscroll-behavior: contain; outline: none; -webkit-user-select: none; user-select: none; }
+.roll-scroll { max-height: min(340px, 60vh); overflow: auto; overscroll-behavior: contain; outline: none; -webkit-user-select: none; user-select: none; }
 .roll-inner { display: flex; width: max-content; }
 .roll-labels { flex: none; position: sticky; left: 0; z-index: 1; background: var(--paper); border-right: 1px solid var(--rule); }
 .roll-labels svg, .roll-grid svg { display: block; }
@@ -165,11 +188,30 @@ button.rec.on .dot { border-radius: 2px; animation: pulse 1s infinite; }
 svg text { font-family: var(--font-body); }
 .fretboard, .piano, .staff { display: block; }
 
+/* ---- Modes ---- */
+.modes { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(240px, 280px); gap: 10px; padding-bottom: 6px; }
+.mode { border: 1px solid var(--rule); border-radius: 10px; background: var(--paper); padding: 12px; display: grid; gap: 8px; align-content: start; }
+.mode.on { border-color: var(--warm); box-shadow: inset 0 0 0 1px var(--warm); background: var(--warm-wash); }
+.mode h3 { margin: 0; font: 700 17px/1.2 var(--font-display); }
+.mode h3 small { font: 400 12px var(--font-body); color: var(--ink-soft); margin-left: 4px; }
+.mode p { margin: 0; font-size: 14px; color: var(--ink-soft); }
+.mode .fit { font: 600 12px/1.3 var(--font-body); }
+.mode .fit.ok { color: var(--good); }
+.mode .fit.change { color: var(--warm); }
+.mode .sig { display: grid; gap: 2px; }
+.mode .sig b { font: 700 15px/1.3 var(--font-display); }
+.mode .sig .nums { font: 12px/1.3 var(--font-mono); color: var(--ink-soft); }
+.mode p.colour { font-size: 13px; }
+.mode p.colour b { color: var(--ink); }
+.mode .row { display: flex; flex-wrap: wrap; gap: 6px; }
+.mode .row button { padding: 8px 12px; font-size: 13px; }
+
 /* ---- Chords ---- */
 .chords { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { border-radius: 8px; border: 1px solid var(--rule); background: var(--paper); padding: 8px 12px; display: grid; gap: 2px; cursor: pointer; text-align: left; }
 .chip b { font: 700 18px/1 var(--font-display); color: var(--warm); }
 .chip span { font: 12px/1 var(--font-mono); color: var(--ink-soft); }
+.chip.sig { border-style: dashed; border-color: var(--warm); }
 .chip.active { background: var(--warm-wash); border-color: var(--warm); }
 
 .empty { color: var(--ink-soft); font-size: 15px; padding: 18px; border: 1px dashed var(--rule); border-radius: 8px; text-align: center; }

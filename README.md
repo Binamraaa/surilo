@@ -12,13 +12,14 @@ Made for beginner and intermediate players who can hum a tune but can't yet find
 
 - **Live tuner.** Shows the note you're humming right now, plus a needle for how sharp or flat you are.
 - **Note blocks.** Cleans up your hum and turns it into a row of notes. It smooths out vibrato and scoops, ignores breaths, and keeps repeated notes ("da-da") separate.
-- **Fix the notes.** An editable piano roll. Drag a note up or down when you hummed a bit flat or sharp, drag its edges to change its length, and add, split, join or delete notes, with undo. A faint line shows your actual voice. Every other view, playback and the MIDI file follow your edits.
+- **Fix the notes.** An editable piano roll. Drag a note up or down when you hummed a bit flat or sharp, drag its edges to change its length, and add, split, join or delete notes, with undo. A faint line shows your actual voice. Every other view, playback and the MIDI file follow your edits. On a phone, tap a note to bring up a bottom bar with big Lower/Higher, Shorter/Longer, Split, Join and Delete buttons. Rows get taller and there's a zoom control.
 - **Tuning correction.** Most people hum a little sharp or flat, and drift further as they go. The app follows your tuning through the hum and snaps each note relative to where your voice is at that point.
 - **Best-guess notes.** When you land halfway between two notes, the app picks the one that fits the key and the notes around it, and marks it (dashed, ≈). Tap it to keep the guess or switch to the other note. Your answers tune how much it leans on the key, saved on your device only.
 - **Guitar view.** Puts each note on the fretboard in the easiest place to play. A small path-finding step (Viterbi) favours low frets and open strings and keeps your hand from jumping around.
 - **Piano view.** Highlights the hummed notes on a keyboard.
 - **Staff view.** Writes the notes on a staff. Guitar uses treble clef with an 8 below (guitar is written an octave higher than it sounds). Piano picks treble or bass clef to suit the range.
 - **Key and chords.** Guesses the key with Krumhansl–Kessler key profiles, penalising keys that would make your notes "wrong". It then suggests one chord per phrase.
+- **Moods (modes).** Your melody can go in more than one direction. Around its home note the app checks Major, Mixolydian, Lydian, Dorian, Minor, Harmonic minor and Phrygian. For each one it shows whether your melody fits as hummed, the note that gives that mode its sound, and a signature progression you can listen to. Pick a mood to re-harmonise the melody, or rewrite the melody into a mode that doesn't quite fit yet (for example, E becomes E♭ for C Dorian). The rewrite counts as an edit, so Undo takes it back.
 - **Playback.** Plays the notes, the notes with backing chords, or your original hum, so you can compare by ear.
 - **MIDI export.** Saves the melody and chords as a `.mid` file you can drop into Reaper or any DAW.
 - **Input options.** Works with the mic, with an uploaded voice memo, or with the built-in sample hums.
@@ -73,6 +74,7 @@ scripts/sweep.mjs          accuracy sweep over hundreds of synthetic hums
 - [ ] Rhythm: quantise note lengths to beats and show proper note values
 - [ ] Spotify Basic Pitch as an optional "high quality" mode for recordings
 - [ ] Chord shapes (guitar diagrams) for the suggested chords
+- [ ] Package as an installable app (offline service worker, then Capacitor for the app stores)
 - [ ] Transpose to a capo position or an easier key
 
 ## Tips for good results

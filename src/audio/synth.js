@@ -140,6 +140,18 @@ export function playOnce(midis, timbre = 'guitar') {
   midis.forEach((m, i) => voice(c, out, m, t + i * 0.025, chord ? 1.2 : 0.7, { timbre, gain: chord ? 0.2 : 0.35 }));
 }
 
+/** Play a list of chords one after another (each a list of MIDI notes), e.g. a mode's signature progression. */
+export function playSequence(chords, { step = 0.8, timbre = 'piano' } = {}) {
+  stopPlayback();
+  const c = getCtx();
+  const out = c.createGain(); out.connect(getMaster(c));
+  const t0 = c.currentTime + 0.05;
+  const nodes = [];
+  chords.forEach((midis, k) => midis.forEach((m, i) => nodes.push(...voice(c, out, m, t0 + k * step + i * 0.02, step * 0.95, { timbre, gain: 0.2 }))));
+  const id = Symbol('seq');
+  current = { id, stop() { nodes.forEach((o) => { try { o.stop(); } catch { /* done */ } }); out.disconnect(); } };
+}
+
 /** Play back the original recording. */
 export function playRecording({ samples, sampleRate }, { onTick = () => {}, onEnd = () => {} } = {}) {
   stopPlayback();

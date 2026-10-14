@@ -101,9 +101,10 @@ export function diatonicChords(key) {
  * (or by long pauses) and pick, for each, the diatonic chord whose tones cover
  * the most melody time. Also returns the overall best-fitting chords.
  */
-export function suggestChords(notes, key, { notesPerChord = 4 } = {}) {
-  if (!notes.length || !key) return { progression: [], palette: [] };
-  const chords = diatonicChords(key);
+export function suggestChords(notes, key, { notesPerChord = 4, chords: chordSet = null } = {}) {
+  if (!notes.length || (!key && !chordSet)) return { progression: [], palette: [] };
+  // `chords` lets a chosen mood (mode) supply its own chord set (see modes.js).
+  const chords = chordSet || diatonicChords(key);
 
   const fit = (chord, group, cadence = false) => {
     let covered = 0, total = 0;
