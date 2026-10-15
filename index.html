@@ -130,7 +130,9 @@
           <button type="button" class="tool" id="ed-merge" title="Join with the next note">Join</button>
           <button type="button" class="tool" id="ed-delete" title="Delete (Del)">Delete</button>
         </div>
-        <div class="tool-group">
+        <div class="tool-group ed-last">
+          <button type="button" class="tool" id="ed-oct-down" title="Octave down (Shift+↓)">▼ Octave</button>
+          <button type="button" class="tool" id="ed-oct-up" title="Octave up (Shift+↑)">▲ Octave</button>
           <button type="button" class="tool" id="ed-undo" title="Undo (Ctrl+Z)">Undo</button>
           <button type="button" class="tool" id="ed-reset" title="Throw away all edits">Reset</button>
         </div>
@@ -141,7 +143,7 @@
         <button type="button" class="tool" id="guess-undo"></button>
       </div>
       <div id="roll"></div>
-      <p class="hint">Drag a note up or down to fix a flat or sharp note, or tap it and use the buttons. Drag a selected note's edges to change its length. Double-click an empty spot to add a note (press and hold on a phone). The grey line is your actual voice. Dashed notes (≈) are best guesses: you hummed between two notes, so the app picked the one that fits the tune. Tap one to check it. <span id="edit-count" class="edit-count"></span></p>
+      <p class="hint">Drag a note up or down to fix a flat or sharp note, or tap it and use the buttons. A note far too high or low is usually the right note in the wrong octave: use ▲ Octave or ▼ Octave. Delete a wrong note and the notes next to it fill its gap. Drag a selected note's edges to change its length. Double-click an empty spot to add a note (press and hold on a phone). The grey line is your actual voice. Dashed notes (≈) are best guesses: you hummed between two notes, so the app picked the one that fits the tune. Tap one to check it. <span id="edit-count" class="edit-count"></span></p>
     </div>
 
     <div class="scroll-x"><div class="blocks" id="blocks"></div></div>

@@ -64,9 +64,34 @@ export function reshape(notes, i, { dStart = 0, dEnd = 0 } = {}) {
 
 export const moveNote = (notes, i, dt) => reshape(notes, i, { dStart: dt, dEnd: dt });
 
+export const TOUCH = 0.08; // seconds: notes closer than this are sung as one stretch
+
+/**
+ * Delete a note. A wrong note is usually a glitch inside your voice's flow, so
+ * the notes touching it take over its time instead of leaving a hole: the one
+ * before stretches to cover it (the two share it if both touch), and if they're
+ * the same note they become one again, as you sang it. A note on its own just goes.
+ */
 export function deleteNote(notes, i) {
-  if (!notes[i]) return notes;
-  return notes.filter((_, j) => j !== i);
+  const n = notes[i];
+  if (!n) return notes;
+  const out = notes.filter((_, j) => j !== i);
+  const p = i - 1, q = i; // neighbours, as indices into `out`
+  const prev = out[p], next = out[q];
+  const prevTouches = prev && n.start - prev.end <= TOUCH;
+  const nextTouches = next && next.start - n.end <= TOUCH;
+  if (prevTouches && nextTouches && prev.midi === next.midi) {
+    out.splice(p, 2, { ...prev, end: Math.max(prev.end, next.end), edited: true });
+  } else if (prevTouches && nextTouches) {
+    const mid = (n.start + n.end) / 2;
+    out[p] = { ...prev, end: Math.max(prev.end, mid), edited: true };
+    out[q] = { ...next, start: Math.min(next.start, mid), edited: true };
+  } else if (prevTouches) {
+    out[p] = { ...prev, end: Math.max(prev.end, n.end), edited: true };
+  } else if (nextTouches) {
+    out[q] = { ...next, start: Math.min(next.start, n.start), edited: true };
+  }
+  return out;
 }
 
 export function addNote(notes, { midi, start, end }) {

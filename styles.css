@@ -194,7 +194,7 @@ button.rec.on .dot { border-radius: 2px; animation: pulse 1s infinite; }
 .tools.docked .ed-done { display: inline-flex; }
 .tools.docked .tool-group { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .tools.docked .ed-pitch { grid-template-columns: 1fr 2fr 2fr 1fr; }
-.tools.docked .tool-group:last-child { grid-template-columns: 1fr 1fr; }
+.tools.docked .ed-last { grid-template-columns: repeat(4, 1fr); }
 .tools.docked .tool { min-height: 44px; font-size: 14px; padding: 8px 4px; }
 .tools.docked .tool.big { font-size: 16px; font-weight: 700; }
 body.has-dock { padding-bottom: 230px; }

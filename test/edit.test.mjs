@@ -55,6 +55,21 @@ test('add, delete, split, merge', () => {
   assert.deepEqual([merged[0].midi, merged[0].start, merged[0].end], [60, 0, 1.0]);
 });
 
+test('delete: touching notes fill the gap instead of leaving a hole', () => {
+  const n = (midi, start, end) => ({ midi, start, end });
+  const span = (ns) => ns.map((x) => [x.midi, x.start, x.end]);
+  // A B4 glitch in the middle of a held B3: the B3 comes back as one note.
+  assert.deepEqual(span(deleteNote([n(59, 0.81, 1.13), n(71, 1.13, 1.27), n(59, 1.27, 1.8)], 1)), [[59, 0.81, 1.8]]);
+  // Different notes either side share the gap.
+  assert.deepEqual(span(deleteNote([n(60, 0, 1), n(72, 1, 1.2), n(62, 1.2, 2)], 1)), [[60, 0, 1.1], [62, 1.1, 2]]);
+  // Only the note before touches: it stretches. Only the note after: it starts earlier.
+  assert.deepEqual(span(deleteNote([n(60, 0, 1), n(72, 1, 1.2), n(62, 1.6, 2)], 1)), [[60, 0, 1.2], [62, 1.6, 2]]);
+  assert.deepEqual(span(deleteNote([n(60, 1.21, 1.32), n(61, 1.32, 1.65)], 0)), [[61, 1.21, 1.65]]);
+  // A note on its own just goes, and nothing else moves.
+  assert.deepEqual(span(deleteNote([n(50, 0.79, 0.92), n(61, 1.32, 1.65)], 0)), [[61, 1.32, 1.65]]);
+  assert.equal(deleteNote([n(60, 0, 1), n(72, 1, 1.2)], 1)[0].edited, true);
+});
+
 test('undo history', () => {
   const h = createHistory(2);
   h.push([1]); h.push([2]); h.push([3]);

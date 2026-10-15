@@ -111,7 +111,7 @@ function renderRoll() {
     selected: state.selected, flats: state.flats,
   });
   const sel = state.selected != null;
-  for (const id of ['ed-up', 'ed-down', 'ed-split', 'ed-delete', 'ed-shorter', 'ed-longer']) $(id).disabled = !sel;
+  for (const id of ['ed-up', 'ed-down', 'ed-oct-up', 'ed-oct-down', 'ed-split', 'ed-delete', 'ed-shorter', 'ed-longer']) $(id).disabled = !sel;
   $('ed-prev').disabled = !state.notes.length || state.selected === 0;
   $('ed-next').disabled = !state.notes.length || state.selected === state.notes.length - 1;
   const cur = state.notes[state.selected];
@@ -548,7 +548,10 @@ function applyEdit(edit) {
     const ids = new Set(before.map((n) => n.id));
     state.selected = after.findIndex((n) => !ids.has(n.id));
   } else if (edit.type === 'delete') {
-    state.selected = after.length ? Math.min(i, after.length - 1) : null;
+    // Two neighbours joined into one: select it. Otherwise the note that took the deleted one's place.
+    const joined = after.length === before.length - 2;
+    state.selected = after.length ? Math.min(joined ? i - 1 : i, after.length - 1) : null;
+    edit.healed = joined || after.some((n, k) => n !== before[k < i ? k : k + 1]);
   } else {
     state.selected = indexOfId(after, selId);
   }
@@ -559,7 +562,7 @@ function applyEdit(edit) {
   const msg = {
     transpose: () => `Moved to ${midiToName(sel.midi, { flats: state.flats })}.`,
     reshape: () => 'Timing changed.',
-    delete: () => 'Note deleted.',
+    delete: () => (edit.healed ? 'Note deleted. The notes next to it now fill its time.' : 'Note deleted.'),
     add: () => 'Note added. Drag it into place.',
     split: () => 'Note split in two.',
     merge: () => 'Joined with the next note.',
@@ -594,6 +597,8 @@ function init() {
   });
   $('ed-up').addEventListener('click', () => applyEdit({ type: 'transpose', semis: 1 }));
   $('ed-down').addEventListener('click', () => applyEdit({ type: 'transpose', semis: -1 }));
+  $('ed-oct-up').addEventListener('click', () => applyEdit({ type: 'transpose', semis: 12 }));
+  $('ed-oct-down').addEventListener('click', () => applyEdit({ type: 'transpose', semis: -12 }));
   $('ed-split').addEventListener('click', () => applyEdit({ type: 'split' }));
   $('ed-merge').addEventListener('click', () => applyEdit({ type: 'merge' }));
   $('ed-delete').addEventListener('click', () => applyEdit({ type: 'delete' }));
