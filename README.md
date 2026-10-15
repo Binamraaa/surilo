@@ -69,7 +69,7 @@ Each test is a single `.wav` file at the recording's own sample rate, with the a
 
 ```
 src/core/      pure logic: no DOM, no Web Audio, runs in Node
-  pitch.js     YIN pitch detector, loudness gate, buffer analysis
+  pitch.js     YIN pitch detector, loudness gate, pYIN-style pitch tracking
   notes.js     pitch frames → stable notes (smoothing, segmentation, tuning offset)
   intent.js    pick the note you meant: follows drift, weighs the key and nearby notes
   rhythm.js    tempo, time signatures, beat grid, tap tempo

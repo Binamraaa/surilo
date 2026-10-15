@@ -1,7 +1,7 @@
 // Run: node --test test/*.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { yin, analyseBuffer, midiToHz } from '../src/core/pitch.js';
+import { yin, analyseBuffer, trackPitch, midiToHz } from '../src/core/pitch.js';
 import { framesToNotes, midiToName, centsOff } from '../src/core/notes.js';
 import { guessKey, suggestChords, fingerMelody, staffSpelling, chordsWithNote, voiceChord } from '../src/core/theory.js';
 import { synthHum, DEMO_MELODIES } from '../src/core/demo.js';
@@ -19,6 +19,50 @@ test('YIN finds pure tones across the humming range within 5 cents', () => {
     const cents = 1200 * Math.log2(r.hz / hz);
     assert.ok(Math.abs(cents) < 5, `${hz} Hz off by ${cents.toFixed(1)} cents`);
   }
+});
+
+/** A hum whose middle note has a weak fundamental and weak odd harmonics, like "mmm" on a phone mic. */
+function weakHum(sr = 48000) {
+  const plan = [[50, 1, 0.5], [55, 1, 0.5], [57, 0.2, 0.6], [55, 1, 0.5], [50, 1, 0.6]];
+  const x = new Float32Array(Math.round(sr * plan.reduce((s, p) => s + p[2], 0)));
+  let i = 0, ph = 0;
+  for (const [m, h1, dur] of plan) {
+    const f0 = midiToHz(m);
+    for (let k = 0; k < sr * dur; k++, i++) {
+      const t = k / sr;
+      ph += (2 * Math.PI * f0 * (1 + 0.003 * Math.sin(2 * Math.PI * 5.5 * t))) / sr;
+      const env = Math.min(1, t / 0.03, (dur - t) / 0.03);
+      const odd = h1 < 1 ? 0.05 : 0.3;
+      x[i] = 0.3 * env * (h1 * Math.sin(ph) + Math.sin(2 * ph + 0.5) + odd * Math.sin(3 * ph + 1) + 0.3 * Math.sin(4 * ph));
+    }
+  }
+  return { samples: x, sampleRate: sr };
+}
+
+test('a note with a weak fundamental is not read an octave up', () => {
+  const { samples, sampleRate } = weakHum();
+  const plain = framesToNotes(analyseBuffer(samples, sampleRate, { track: false })).notes.map((n) => n.midi);
+  assert.deepEqual(plain, [50, 55, 69, 55, 50], 'plain YIN should show the problem');
+  const tracked = framesToNotes(analyseBuffer(samples, sampleRate)).notes.map((n) => n.midi);
+  assert.deepEqual(tracked, [50, 55, 57, 55, 50]);
+});
+
+test('pitch tracking: ignores a brief octave flip, follows a real leap, drops a fading shadow', () => {
+  const frame = (main, alt, pMain) => [{ midi: main, p: pMain }, { midi: alt, p: 1 - pMain }];
+  const flip = [
+    ...Array.from({ length: 20 }, () => frame(50, 62, 0.8)),
+    ...Array.from({ length: 6 }, () => frame(62, 50, 0.7)), // a 70 ms flip up
+    ...Array.from({ length: 20 }, () => frame(50, 62, 0.8)),
+  ];
+  const pick = trackPitch(flip);
+  assert.ok(pick.every((j, i) => flip[i][j].midi === 50), 'stays on D3');
+
+  const leap = [...Array.from({ length: 20 }, () => frame(50, 38, 0.8)), ...Array.from({ length: 40 }, () => frame(62, 50, 0.8))];
+  const leapPick = trackPitch(leap).map((j, i) => leap[i][j].midi);
+  assert.deepEqual([leapPick[10], leapPick[59]], [50, 62], 'takes an octave leap that lasts');
+
+  const fade = [...Array.from({ length: 20 }, () => frame(56, 44, 0.8)), [{ midi: 44, p: 0.9 }], [{ midi: 44, p: 0.9 }]];
+  assert.deepEqual(trackPitch(fade).slice(-3), [0, -1, -1], 'the octave-down tail is dropped, not followed');
 });
 
 test('note naming', () => {

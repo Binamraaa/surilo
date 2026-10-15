@@ -16,12 +16,12 @@ A browser app: hum a melody, then see the notes as blocks, on a guitar fretboard
 
 ## Architecture
 - `src/core/`: **pure logic, with no DOM and no Web Audio**. It must keep running in Node. This module will later feed hummed ideas as MIDI into a separate Reaper-based "AI producer" project, so keep it clean and dependency-free.
-  - `pitch.js`: YIN detector (input is downsampled ×2 when the sample rate is above 30 kHz), RMS gate, `analyseBuffer`, adaptive gate
+  - `pitch.js`: YIN detector (input is downsampled ×2 when the sample rate is above 30 kHz), RMS gate, adaptive gate. The live view uses plain YIN frame by frame (`analyseFrame`). `analyseBuffer` (whole recordings, run again when you press Stop) is pYIN-style: `yinCandidates` gives every dip a chance from a Beta prior over thresholds, an octave-up check moves the chance to the dip at twice the lag when that one is far deeper (weak fundamental, "mmm" on a phone mic), candidates far from the middle of the hum lose out to a rival an octave nearer, and `trackPitch` (Viterbi) picks a smooth path with a jump cost and a "no pitch" option, so brief octave flips and octave-down shadows on fading notes disappear. `track: false` gives plain YIN
   - `notes.js`: `framesToNotes`. Median smoothing, then segmentation: a pitch change has to hold for `changeMs`, a loudness dip followed by a rise re-articulates repeated notes, the attack (first 25%) is ignored when picking a note's pitch, and the tuning offset is estimated from note centres (circular mean)
   - `theory.js`: Krumhansl–Kessler key profiles plus an out-of-scale penalty and a small major-key prior; chord suggestions per phrase (groups of 4 notes or split on pauses, with a cadence bonus on the last note); `chordsWithNote` (the chords that contain one note, used live and for the playing or selected note); `voiceChord` (plays chords around E3–D♯4 so small speakers can reproduce them); Viterbi guitar fingering; staff spelling
   - `intent.js`: `transcribe` = `framesToNotes` + `intendNotes`. Follows the singer's drift (circular mean over ±6 neighbouring notes, unwrapped note by note, leaving the note itself out). Notes more than 20¢ from a semitone get two candidates, and a Viterbi pass scores pitch distance, a mild out-of-key penalty and melodic step size. Notes it moves get `adjusted: true` + `nearest`. `trust` (learnt in app.js from Keep/Use answers, kept in localStorage) scales the key and step terms
   - `modes.js`: seven moods around a home note (Ionian, Mixolydian, Lydian, Dorian, Aeolian, harmonic minor, Phrygian). `rankModes` scores how well the melody fits each one and lists the clashing notes, `modeChords` builds triads with Roman numerals, and `rewriteInMode` moves clashing notes degree by degree. **Spelling goes by scale degree** (`spell()`, `prefersFlats()`): C♯ in D harmonic minor, D♭ in C Phrygian
-  - `edit.js`: pure note-editing operations (transpose, reshape, add, delete, split, merge) plus an undo stack. Every operation returns a new array, and notes carry a stable `id` so the selection follows a note when the array is re-sorted
+  - `edit.js`: pure note-editing operations (transpose, reshape, add, delete, split, merge) plus an undo stack. Deleting a note hands its time to the notes touching it (and rejoins them if they're the same note), because a wrong note is usually a glitch inside a held note. Every operation returns a new array, and notes carry a stable `id` so the selection follows a note when the array is re-sorted
   - `rhythm.js`: tempo and the beat grid. A "beat" is one grid unit and one metronome click: a quarter in 4/4 and 3/4, an eighth in 6/8 (where the BPM counts dotted quarters, so `secondsPerBeat` = 60/bpm/3). `accentLevel` (2 = beat 1, 1 = beat 4 in 6/8), `tapTempo` (median of the last 8 taps, reset after a 2 s pause, clamped 40–240)
   - `wav.js`: 16-bit PCM WAV writer and a reader for PCM/float WAVs. A test hum's answer key is JSON in a custom `json` chunk after the audio (one file per hum: Android's share sheet won't share .json files)
   - `midi.js`: SMF format 1 writer (conductor track, melody track, chords track)
@@ -42,10 +42,11 @@ A browser app: hum a melody, then see the notes as blocks, on a guitar fretboard
 - Copy is written for beginners: plain words, no jargon without explanation.
 
 ## Accuracy baseline
-`scripts/sweep.mjs`, as of 2026-10-13. "Any key" counts a hum as right if every note is off by the same semitone: a singer 55¢ flat throughout could have meant either key.
+`scripts/sweep.mjs`, as of 2026-10-15 (with pitch tracking). "Any key" counts a hum as right if every note is off by the same semitone: a singer 55¢ flat throughout could have meant either key.
 - steady (270 hums): 100% exact, with plain rounding and with intent.
-- sloppy (192): plain rounding 66.1% exact / 71.4% any key / 93.8% notes. With intent: 81.3% / 90.6% / 97.9%. Most of the gain comes from following drift. Only about 2 in 3 key-based adjustments are right (19 of 29), which is why they're marked and one tap undoes them.
+- sloppy (192): plain rounding 65.6% exact / 70.8% any key / 93.7% notes. With intent: 81.8% / 90.6% / 97.9%. Most of the gain comes from following drift. Only about 2 in 3 key-based adjustments are right (19 of 29), which is why they're marked and one tap undoes them.
 - chromatic (60): 100% with both.
+- The synthetic singers never make octave errors, so they can't measure the pitch tracking: check it on real hums (`real-hums.mjs`). On the first 3 real hums it removed all 9 octave errors (8 of them left in the answer keys by mistake).
 Re-run before and after changing segmentation or intent parameters. Tune on some seeds and check on others, because the synthetic singers are only a stand-in for real voices.
 
 ## Roadmap
