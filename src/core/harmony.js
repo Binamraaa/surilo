@@ -136,32 +136,74 @@ const median = (xs) => {
  */
 function buildSpans(notes, slots, moods) {
   const spans = [];
+  // Bar slots know which notes fall on strong beats (`accents`), and where they start (`e0`, in eighths).
+  const onBeats = (slot, idx) => (slot.accents ? slot.accents.filter((k) => idx.includes(k)) : null);
   slots.forEach((slot, i) => {
     const mood = moods[i];
     const idx = Array.from({ length: slot.count }, (_, k) => slot.first + k);
     const prev = spans[spans.length - 1];
+    // Split a slot in two: at the half bar when there's a beat, else halfway through its notes.
+    const h = slot.half != null ? slot.half - slot.first : Math.ceil(idx.length / 2);
     if (mood.rate === 2 && prev && prev.mood === mood && prev.slots.length === 1 && prev.rate2 && !prev.phraseEnd) {
       prev.slots.push(i);
       prev.indices.push(...idx);
       prev.heads.push(slot.first);
+      if (prev.accents) prev.accents.push(...onBeats(slot, idx));
       prev.phraseEnd = slot.phraseEnd;
       prev.rate2 = false;
-    } else if (mood.rate === 0.5 && idx.length > 1) {
-      const h = Math.ceil(idx.length / 2);
-      spans.push({ slots: [i], indices: idx.slice(0, h), heads: [idx[0]], phraseEnd: false, mood });
-      spans.push({ slots: [i], indices: idx.slice(h), heads: [idx[h]], phraseEnd: slot.phraseEnd, mood });
+    } else if (mood.rate === 0.5 && h > 0 && h < idx.length) {
+      const [a, b] = [idx.slice(0, h), idx.slice(h)];
+      spans.push({ slots: [i], indices: a, heads: [a[0]], phraseEnd: false, mood, e0: slot.e0, accents: onBeats(slot, a) });
+      spans.push({ slots: [i], indices: b, heads: [b[0]], phraseEnd: slot.phraseEnd, mood, e0: slot.eHalf, accents: onBeats(slot, b) });
     } else {
-      spans.push({ slots: [i], indices: idx, heads: [slot.first], phraseEnd: slot.phraseEnd, mood, rate2: mood.rate === 2 });
+      spans.push({ slots: [i], indices: idx, heads: [slot.first], phraseEnd: slot.phraseEnd, mood, rate2: mood.rate === 2, e0: slot.e0, accents: onBeats(slot, idx) });
     }
   });
   const long = 1.75 * median(notes.map(dur));
   const last = notes.length - 1;
   for (const sp of spans) {
     sp.main = sp.indices.reduce((a, b) => (dur(notes[b]) > dur(notes[a]) ? b : a));
-    const strong = new Set([...sp.heads, sp.main, ...sp.indices.filter((k) => dur(notes[k]) >= long || k === last)]);
-    sp.strong = [...strong].sort((a, b) => a - b);
+    const held = sp.indices.filter((k) => dur(notes[k]) >= long || k === last);
+    // With a beat, the notes on strong beats must fit (or, in a bar that starts on a rest or a
+    // held note, its first and longest); without one, each slot's first note and its longest.
+    const lead = sp.accents ? (sp.accents.length ? sp.accents : [sp.heads[0], sp.main]) : [...sp.heads, sp.main];
+    sp.strong = [...new Set([...lead, ...held])].sort((a, b) => a - b);
   }
   return spans;
+}
+
+/**
+ * Slots from bars, for a hum with a beat: one per bar that has a note starting in it (a
+ * bar where a note is only held, or that's silent, keeps the chord before). The note on
+ * beat 1 is strong, and so is one held from the middle of the bar (beat 3 in 4/4, beat 4
+ * in 6/8) for half a bar or more; a short note there is often just passing. `half` marks
+ * the first note in the second half of the bar, for moods that change chord twice a bar.
+ * @param {ReturnType<import('./rhythm.js').quantize>} rhythm
+ * @returns {Array<{first, count, phraseEnd, bar, e0, eHalf, half, accents:number[]}>}
+ */
+export function barSlots(rhythm) {
+  const { notes: t, barLen, sig, per } = rhythm;
+  const halfAt = sig === '3/4' ? null : barLen / 2;
+  const slots = [];
+  t.forEach((n, i) => {
+    const bar = Math.floor(n.e / barLen);
+    const pos = n.e - bar * barLen;
+    let s = slots[slots.length - 1];
+    if (!s || bar > s.bar) {
+      s = { first: i, count: 0, bar, e0: bar * barLen, eHalf: halfAt == null ? null : bar * barLen + halfAt, half: null, accents: [], phraseEnd: false };
+      slots.push(s);
+    }
+    s.count++;
+    if (pos === 0 || (pos === halfAt && n.len >= halfAt)) s.accents.push(i);
+    if (halfAt != null && s.half == null && pos >= halfAt) s.half = i;
+  });
+  // A phrase ends before a rest of a beat or more, and at the end.
+  slots.forEach((s, k) => {
+    const next = slots[k + 1];
+    const end = t[s.first + s.count - 1];
+    s.phraseEnd = !next || t[next.first].e - (end.e + end.len) >= per;
+  });
+  return slots;
 }
 
 // ---------- Scoring ----------
@@ -375,12 +417,12 @@ function explain(notes, sp, cand, home) {
  * @param {Array<{midi,start,end}>} notes
  * @param {object} [o]
  * @param {{tonic:number, mode:'major'|'minor'}} [o.home]  the home key (default: the guessed key)
- * @param {Array<{first,count,phraseEnd}>} [o.slots]  where chords may change (default: phraseSlots)
+ * @param {Array<{first,count,phraseEnd}>} [o.slots]  where chords may change (default: phraseSlots; barSlots with a beat)
  * @param {string|string[]} [o.journey]  one mood id, or one per slot (see journeyFor in moods.js)
  * @param {number} [o.variations]  how many different progressions to return
  * @param {boolean} [o.lift]  end on the major home chord if the melody allows (a journey's Picardy lift)
- * @returns {Array<Array<{slotIndex, slots, start, end, firstIndex, noteCount, chord, roman, borrowed, clash,
- *   pivot, turnaround, lift, why, mood, strong}>>}
+ * @returns {Array<Array<{slotIndex, slots, at, start, end, firstIndex, noteCount, chord, roman, borrowed, clash,
+ *   pivot, turnaround, lift, why, mood, strong}>>}  at: where the chord starts in eighths, with bar slots
  *   the variations, best first; each is the list of chords in time order
  */
 export function harmonise(notes, { home = null, slots = null, journey = 'bright', variations = 3, lift = false } = {}) {
@@ -428,7 +470,7 @@ export function harmonise(notes, { home = null, slots = null, journey = 'bright'
     }
     if (cand.lift) why += ' Ending on the major home chord lifts the music into the light (a "Picardy third").';
     return {
-      slotIndex: sp.slots[0], slots: sp.slots,
+      slotIndex: sp.slots[0], slots: sp.slots, at: sp.e0 ?? null,
       start: notes[first].start, end: notes[last].end, firstIndex: first, noteCount: sp.indices.length,
       chord: cand.chord, roman: cand.chord.numeral, borrowed: cand.borrowed, clash: !!cand.clash,
       ...join, lift: !!cand.lift, why, mood: sp.mood.id, strong: sp.strong,

@@ -68,8 +68,10 @@ export function toMidiFile(notes, progression = [], { rhythm = null, tempo = nul
     const ch = [];
     const lowest = Math.min(...notes.map((n) => n.midi));
     const base = Math.floor((lowest - 7) / 12) * 12;
-    // On the grid, a chord starts with its first note and lasts until the next chord.
-    const startOf = (p) => (grid && p.firstIndex != null ? tickOfE(rhythm.notes[p.firstIndex].e) : ticks(p.start - offset));
+    // On the grid, a chord starts on its bar line (or with its first note) and lasts until the next chord.
+    const startOf = (p) => (!grid ? ticks(p.start - offset)
+      : p.at != null ? tickOfE(Math.max(p.at, rhythm.notes[0].e))
+      : p.firstIndex != null ? tickOfE(rhythm.notes[p.firstIndex].e) : ticks(p.start - offset));
     const lastNote = grid ? rhythm.notes[rhythm.notes.length - 1] : null;
     progression.forEach((p, i) => {
       const next = progression[i + 1];

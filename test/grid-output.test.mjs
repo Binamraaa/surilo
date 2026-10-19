@@ -115,3 +115,71 @@ test('the samples come with their real rhythm, pickups and all', () => {
     assert.ok(r.rests.every((x) => x.e >= r.notes[0].e), `${name}: no rests before the first note`);
   }
 });
+
+// ---------- Chords on bars ----------
+
+import { barSlots, supports } from '../src/core/harmony.js';
+import { MOODS, moodById } from '../src/core/moods.js';
+
+const C = { tonic: 0, mode: 'major' };
+const onGrid = (melody, sig = '4/4', from = 0) => {
+  const notes = sung(melody, { sig, from });
+  return { notes, rhythm: quantize(notes, steadyTempo({ bpm: 100, sig })) };
+};
+
+test('bar slots: one per bar, strong beats marked, the half bar found', () => {
+  const { rhythm } = onGrid(DEMO_MELODIES['Ode to Joy']);
+  const slots = barSlots(rhythm);
+  assert.deepEqual(slots.map((s) => [s.bar, s.first, s.count]), [[0, 0, 4], [1, 4, 4], [2, 8, 4], [3, 12, 3]]);
+  assert.deepEqual(slots[0].accents, [0]);      // beat 1 (the F on beat 3 is a passing note)
+  assert.deepEqual(slots[3].accents, [12, 14]); // E. on beat 1, and the half note held from beat 3
+  assert.equal(slots[3].half, 14);
+  assert.deepEqual(slots.map((s) => s.phraseEnd), [false, false, false, true]);
+});
+
+test('chords change on bars: per bar, twice a bar (Jazzy), every two bars (Dreamy)', () => {
+  const { notes, rhythm } = onGrid(DEMO_MELODIES['Ode to Joy']);
+  const slots = barSlots(rhythm);
+  const at = (mood) => harmonise(notes, { home: C, slots, journey: mood })[0].map((e) => e.at);
+  assert.deepEqual(at('bright'), [0, 8, 16, 24]);
+  assert.deepEqual(at('jazzy'), [0, 4, 8, 12, 16, 20, 24, 28]);
+  assert.deepEqual(at('dreamy'), [0, 16]);
+  // The notes that must fit are the ones on strong beats, so bar 1 (E E F G) is C, as usual.
+  const [first] = harmonise(notes, { home: C, slots, journey: 'bright' })[0];
+  assert.deepEqual(first.strong, [0]);
+  assert.equal(first.chord.name, 'C');
+});
+
+test('with bars, the rules still hold: no note changes, strong beats fit or the chord is borrowed', () => {
+  for (const [name, melody] of Object.entries(DEMO_MELODIES)) {
+    const { sig, pickup } = DEMO_TIMING[name];
+    const { notes, rhythm } = onGrid(melody, sig, -pickup);
+    const before = JSON.stringify(notes);
+    const slots = barSlots(rhythm);
+    for (const mood of MOODS) {
+      for (const v of harmonise(notes, { slots, journey: mood.id })) {
+        assert.equal(v.reduce((n, e) => n + e.noteCount, 0), notes.length, `${mood.id} on ${name}`);
+        for (const e of v) {
+          if (e.borrowed) continue;
+          for (const k of e.strong) assert.ok(supports(e.chord, ((notes[k].midi % 12) + 12) % 12, moodById(e.mood)), `${mood.id} on ${name}`);
+        }
+      }
+    }
+    assert.equal(JSON.stringify(notes), before);
+  }
+});
+
+test('the MIDI chord track lands on bar lines, even after a rest or a held note', () => {
+  // The F from beat 3 of bar 2 is held into bar 3, whose first new note only comes on beat 3.
+  const { notes, rhythm } = onGrid([[60, 4], [64, 1], [67, 1], [65, 4], [64, 2], [60, 4]]);
+  const slots = barSlots(rhythm);
+  const prog = harmonise(notes, { home: C, slots, journey: 'bright' })[0];
+  const { tracks } = readMidi(toMidiFile(notes, prog, { rhythm, tempo: { bpm: 100, sig: '4/4' } }));
+  const starts = [...new Set(tracks[2].filter((e) => e.type === 'on').map((e) => e.tick))];
+  assert.ok(starts.every((t) => t % 1920 === 0), `chords at ${starts}`);
+  // A pickup's chord starts with the pickup note, not before the music.
+  const g = onGrid(DEMO_MELODIES['Greensleeves (minor)'], '3/4', -1);
+  const gp = harmonise(g.notes, { slots: barSlots(g.rhythm), journey: 'dark' })[0];
+  const gs = readMidi(toMidiFile(g.notes, gp, { rhythm: g.rhythm, tempo: { bpm: 100, sig: '3/4' } })).tracks[2].filter((e) => e.type === 'on');
+  assert.equal(Math.min(...gs.map((e) => e.tick)), 2 * 480);
+});

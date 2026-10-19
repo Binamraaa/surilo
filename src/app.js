@@ -18,7 +18,7 @@ import { createRecordSetup } from './ui/record-setup.js';
 import { createMetronome } from './audio/metronome.js';
 import { trackTempo, secondsPerBeat, beatsPerBar, quantize, stepsPerBeat, accentLevel, tapTempo, clampBpm, TAP_RESET_MS } from './core/rhythm.js';
 import { testModeOn, turnOffTestMode, testHumFile, shareOrDownload } from './ui/test-mode.js';
-import { harmonise, paletteFor } from './core/harmony.js';
+import { harmonise, paletteFor, barSlots } from './core/harmony.js';
 import { MOODS, moodById, JOURNEYS, journeyById, journeyFor } from './core/moods.js';
 
 const $ = (id) => document.getElementById(id);
@@ -120,7 +120,9 @@ function derive() {
 
   // The mood of each part (slot), from the strip, a preset journey, or one mood throughout.
   // Moods only ever choose chords: the notes are left exactly as they are.
-  state.slots = phraseSlots(state.notes);
+  // With a beat, the chords change on bars (each mood sets how often); without, on phrases.
+  state.rhythm = state.tempo && state.notes.length ? quantize(state.notes, state.tempo) : null;
+  state.slots = state.rhythm ? barSlots(state.rhythm) : phraseSlots(state.notes);
   state.mood = moodById(state.moodId || (state.home?.mode === 'minor' ? 'dark' : 'bright'));
   const preset = journeyById(state.journeyId);
   if (state.strip) state.journey = fitStrip(state.strip, state.slots.length);
@@ -134,8 +136,6 @@ function derive() {
   const v = state.versions[versionKey()] || 0;
   state.progression = state.variants.length ? state.variants[v % state.variants.length] : [];
   state.chordsAt = new Map(state.progression.map((p) => [p.firstIndex, p.chord]));
-  // With a beat: the same notes as note values, ties and rests.
-  state.rhythm = state.tempo && state.notes.length ? quantize(state.notes, state.tempo) : null;
   const focus = moodById(state.stripSel != null ? state.journey[state.stripSel] : state.journey[0]) || state.mood;
   state.palette = state.home ? paletteFor(focus, state.home) : [];
   state.fingering = fingerMelody(state.notes);
@@ -351,7 +351,7 @@ function renderMoods() {
     state.cards[m.id] = prog;
     const on = part != null ? state.journey[part] === m.id : steady() && state.mood.id === m.id;
     const use = on ? '<button type="button" disabled>✓ In use</button>'
-      : `<button type="button" class="primary" data-act="use" data-id="${m.id}">${part != null ? `Use for part ${part + 1}` : 'Use'}</button>`;
+      : `<button type="button" class="primary" data-act="use" data-id="${m.id}">${part != null ? `Use for ${partName(part).toLowerCase()}` : 'Use'}</button>`;
     return `<article class="mood${on ? ' on' : ''}" aria-current="${on}">
       <h3>${m.name}<small>${m.theory}</small></h3>
       <p>${m.feel}</p>
@@ -404,14 +404,14 @@ function renderJourney() {
     const w = Math.round(Math.max(56, Math.min(200, (last.end - first.start) * 45)));
     const mood = moodById(state.journey[i]);
     return `<button type="button" class="part${i === state.stripSel ? ' sel' : ''}" data-part="${i}" data-mood="${mood.id}" style="width:${w}px"
-      aria-pressed="${i === state.stripSel}" aria-label="Part ${i + 1}, notes ${sl.first + 1} to ${sl.first + sl.count}: ${mood.name}">
+      aria-pressed="${i === state.stripSel}" aria-label="${partName(i)}, notes ${sl.first + 1} to ${sl.first + sl.count}: ${mood.name}">
       <b>${mood.name}</b><span>${chordsIn(i) || '&nbsp;'}</span></button>`;
   }).join('');
   const pick = $('strip-pick');
   pick.hidden = state.stripSel == null;
   if (pick.hidden) return;
   const i = state.stripSel, sl = state.slots[i];
-  pick.innerHTML = `<p>Part ${i + 1} (notes ${sl.first + 1}–${sl.first + sl.count}): pick its mood.</p>
+  pick.innerHTML = `<p>${partName(i)} (notes ${sl.first + 1}–${sl.first + sl.count}): pick its mood.</p>
     <div class="opts">${MOODS.map((m) => `<button type="button" data-pick="${m.id}" aria-pressed="${state.journey[i] === m.id}">${m.name}</button>`).join('')}
     <button type="button" data-pick="" class="tool">Done</button></div>`;
 }
@@ -425,8 +425,15 @@ function setPartMood(i, id, toEnd = false) {
   derive(); renderAll();
   const name = moodById(id).name;
   setStatus(toEnd && i < strip.length - 1
-    ? `Parts ${i + 1}–${strip.length} are now ${name}. Only the chords changed.`
-    : `Part ${i + 1} is now ${name}. Only the chords changed.`);
+    ? `From ${partName(i).toLowerCase()} to the end, the mood is now ${name}. Only the chords changed.`
+    : `${partName(i)} is now ${name}. Only the chords changed.`);
+}
+
+/** What a part of the mood strip is called: a bar when the hum has a beat, else a part. */
+function partName(i) {
+  const bar = state.slots[i]?.bar;
+  if (bar == null) return `Part ${i + 1}`;
+  return bar < 0 ? 'The pickup' : `Bar ${bar + 1}`;
 }
 
 function initStrip() {
@@ -871,7 +878,7 @@ function playable(progression) {
   const at = (e) => e * eighth;
   const last = r.notes[r.notes.length - 1];
   const notes = state.notes.map((n, i) => ({ ...n, start: at(r.notes[i].e), end: at(r.notes[i].e + r.notes[i].len) - 0.03 }));
-  const prog = progression && progression.map((p) => ({ ...p, start: at(r.notes[p.firstIndex].e), end: at(last.e + last.len) }));
+  const prog = progression && progression.map((p) => ({ ...p, start: at(Math.max(p.at ?? r.notes[p.firstIndex].e, r.notes[0].e)), end: at(last.e + last.len) }));
   let clicks = null;
   if (state.playClick) {
     clicks = [];
