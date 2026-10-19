@@ -23,6 +23,9 @@
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   --font-music: "Noto Music", "Bravura", "Segoe UI Symbol", serif;
   --radius: 10px;
+  /* One wash per mood, for the mood strip. */
+  --m-bright: #f5e6b8; --m-bittersweet: #efd9e3; --m-dark: #d6dbe8; --m-hopeful: #d8ead9; --m-bluesy: #d3e2f2;
+  --m-dreamy: #e4dcf3; --m-epic: #efd5ca; --m-jazzy: #e8e0cc; --m-floating: #d5ecea;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -31,6 +34,8 @@
     --warm: #e2a54f; --warm-wash: #3a2c17; --good: #6cc492;
     --wood: #3a271b; --wood-2: #45301f; --fret: #8d877c; --string: #cfc6b4; --inlay: #9b9381;
     --key-white: #e9ece9; --key-black: #0c1010;
+    --m-bright: #3d3416; --m-bittersweet: #3b2631; --m-dark: #232a3d; --m-hopeful: #1f3526; --m-bluesy: #1d2d40;
+    --m-dreamy: #2d2542; --m-epic: #40261e; --m-jazzy: #35301e; --m-floating: #1b3634;
     color-scheme: dark;
   }
 }
@@ -40,6 +45,8 @@
   --warm: #e2a54f; --warm-wash: #3a2c17; --good: #6cc492;
   --wood: #3a271b; --wood-2: #45301f; --fret: #8d877c; --string: #cfc6b4; --inlay: #9b9381;
   --key-white: #e9ece9; --key-black: #0c1010;
+  --m-bright: #3d3416; --m-bittersweet: #3b2631; --m-dark: #232a3d; --m-hopeful: #1f3526; --m-bluesy: #1d2d40;
+  --m-dreamy: #2d2542; --m-epic: #40261e; --m-jazzy: #35301e; --m-floating: #1b3634;
   color-scheme: dark;
 }
 
@@ -256,30 +263,61 @@ body.has-dock { padding-bottom: 230px; }
 svg text { font-family: var(--font-body); }
 .fretboard, .piano, .staff { display: block; }
 
-/* ---- Modes ---- */
-.modes { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(240px, 280px); gap: 10px; padding-bottom: 6px; }
-.mode { border: 1px solid var(--rule); border-radius: 10px; background: var(--paper); padding: 12px; display: grid; gap: 8px; align-content: start; }
-.mode.on { border-color: var(--warm); box-shadow: inset 0 0 0 1px var(--warm); background: var(--warm-wash); }
-.mode h3 { margin: 0; font: 700 17px/1.2 var(--font-display); }
-.mode h3 small { font: 400 12px var(--font-body); color: var(--ink-soft); margin-left: 4px; }
-.mode p { margin: 0; font-size: 14px; color: var(--ink-soft); }
-.mode .fit { font: 600 12px/1.3 var(--font-body); }
-.mode .fit.ok { color: var(--good); }
-.mode .fit.change { color: var(--warm); }
-.mode .sig { display: grid; gap: 2px; }
-.mode .sig b { font: 700 15px/1.3 var(--font-display); }
-.mode .sig .nums { font: 12px/1.3 var(--font-mono); color: var(--ink-soft); }
-.mode p.colour { font-size: 13px; }
-.mode p.colour b { color: var(--ink); }
-.mode .row { display: flex; flex-wrap: wrap; gap: 6px; }
-.mode .row button { padding: 8px 12px; font-size: 13px; }
+/* ---- Moods ---- */
+.moods { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(250px, 290px); gap: 10px; padding-bottom: 6px; }
+.mood { border: 1px solid var(--rule); border-radius: 10px; background: var(--paper); padding: 12px; display: grid; gap: 8px; align-content: start; }
+.mood.on { border-color: var(--warm); box-shadow: inset 0 0 0 1px var(--warm); background: var(--warm-wash); }
+.mood h3 { margin: 0; font: 700 17px/1.2 var(--font-display); }
+.mood h3 small { display: block; font: 400 12px/1.3 var(--font-body); color: var(--ink-soft); margin-top: 2px; }
+.mood p { margin: 0; font-size: 14px; color: var(--ink-soft); }
+.mood .prog { display: flex; flex-wrap: wrap; gap: 4px; }
+.mood .pc { display: grid; gap: 1px; padding: 4px 7px; border: 1px solid var(--rule); border-radius: 6px; background: var(--sheet); min-width: 38px; }
+.mood .pc b { font: 700 14px/1.1 var(--font-display); color: var(--warm); }
+.mood .pc i { font: normal 11px/1.1 var(--font-mono); color: var(--ink-soft); }
+.mood .pc.borrowed { border-style: dashed; border-color: var(--warm); }
+.mood .more { align-self: center; font-size: 13px; color: var(--ink-soft); }
+.mood .row { display: flex; flex-wrap: wrap; gap: 6px; }
+.mood .row button { min-height: 44px; padding: 8px 12px; font-size: 13px; }
+.mood .ver { font: 11px var(--font-mono); color: var(--ink-soft); }
+.home-pick { display: inline-flex; align-items: center; gap: 8px; }
+.home-pick select { min-height: 44px; }
+
+/* ---- Mood strip (one part per chord slot) ---- */
+.journey { display: grid; gap: 8px; min-width: 0; }
+.journey[hidden] { display: none; }
+.journey-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.journey-head .tool { min-height: 44px; }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.presets button { min-height: 44px; padding: 8px 12px; font-size: 13px; border-radius: 999px; }
+.presets button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.strip { display: flex; gap: 3px; width: max-content; padding-bottom: 4px; }
+.part {
+  min-width: 56px; min-height: 52px; padding: 6px 8px; border: 1px solid var(--rule); border-radius: 8px;
+  display: grid; align-content: center; gap: 2px; text-align: left; cursor: pointer;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: pan-x;
+}
+.part b { font: 700 13px/1.1 var(--font-display); color: var(--ink); white-space: nowrap; }
+.part span { font: 11px/1.1 var(--font-mono); color: var(--ink-soft); white-space: nowrap; }
+.part.sel { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+.part[data-mood="bright"] { background: var(--m-bright); } .part[data-mood="bittersweet"] { background: var(--m-bittersweet); }
+.part[data-mood="dark"] { background: var(--m-dark); } .part[data-mood="hopeful"] { background: var(--m-hopeful); }
+.part[data-mood="bluesy"] { background: var(--m-bluesy); } .part[data-mood="dreamy"] { background: var(--m-dreamy); }
+.part[data-mood="epic"] { background: var(--m-epic); } .part[data-mood="jazzy"] { background: var(--m-jazzy); }
+.part[data-mood="floating"] { background: var(--m-floating); }
+.strip-pick { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-wash); }
+.strip-pick[hidden] { display: none; }
+.strip-pick p { margin: 0; font-size: 14px; }
+.strip-pick .opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.strip-pick .opts button { min-height: 44px; padding: 8px 12px; font-size: 13px; }
+.strip-pick .opts button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 
 /* ---- Chords ---- */
 .chords { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { border-radius: 8px; border: 1px solid var(--rule); background: var(--paper); padding: 8px 12px; display: grid; gap: 2px; cursor: pointer; text-align: left; }
 .chip b { font: 700 18px/1 var(--font-display); color: var(--warm); }
 .chip span { font: 12px/1 var(--font-mono); color: var(--ink-soft); }
-.chip.sig { border-style: dashed; border-color: var(--warm); }
+.chip.borrowed { border-style: dashed; border-color: var(--warm); }
+.why { margin: 0; font-size: 14px; min-height: 1.4em; color: var(--ink-soft); }
 .chip.active { background: var(--warm-wash); border-color: var(--warm); }
 
 .empty { color: var(--ink-soft); font-size: 15px; padding: 18px; border: 1px dashed var(--rule); border-radius: 8px; text-align: center; }

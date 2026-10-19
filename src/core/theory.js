@@ -196,13 +196,16 @@ export function chordsWithNote(midi, key) {
 
 /**
  * MIDI notes for playing a chord out loud: root position with the root between
- * E3 and D♯4 (where laptop and phone speakers still sound full), plus the root
- * an octave lower as a bass note.
+ * E3 and D♯4 (where laptop and phone speakers still sound full), plus a bass note
+ * an octave lower: the root, or a slash chord's own bass (B♭/C → C).
  */
 export function voiceChord(chord, { bass = true } = {}) {
+  const slash = chord.bass != null && chord.bass !== chord.root;
   const root = 52 + (((chord.root % 12) - 4 + 12) % 12);
-  const notes = chord.tones.map((pc) => root + ((pc - (root % 12) + 12) % 12)).sort((a, b) => a - b);
-  return bass ? [root - 12, ...notes] : notes;
+  const tones = slash ? chord.tones.filter((pc) => pc !== chord.bass) : chord.tones;
+  const notes = tones.map((pc) => root + ((pc - (root % 12) + 12) % 12)).sort((a, b) => a - b);
+  const low = slash ? 40 + ((chord.bass - 4 + 12) % 12) : root - 12;
+  return bass ? [low, ...notes] : notes;
 }
 
 // ---------- Guitar ----------

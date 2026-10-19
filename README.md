@@ -19,9 +19,10 @@ Made for beginner and intermediate players who can hum a tune but can't yet find
 - **Guitar view.** Puts each note on the fretboard in the easiest place to play. A small path-finding step (Viterbi) favours low frets and open strings and keeps your hand from jumping around.
 - **Piano view.** Highlights the hummed notes on a keyboard.
 - **Staff view.** Writes the notes on a staff. Guitar uses treble clef with an 8 below (guitar is written an octave higher than it sounds). Piano picks treble or bass clef to suit the range.
-- **Key and chords.** Guesses the key with Krumhansl–Kessler key profiles, penalising keys that would make your notes "wrong". It then suggests one chord per phrase.
-- **Moods (modes).** Your melody can go in more than one direction. Around its home note the app checks Major, Mixolydian, Lydian, Dorian, Minor, Harmonic minor and Phrygian. For each one it shows whether your melody fits as hummed, the note that gives that mode its sound, and a signature progression you can listen to. Pick a mood to re-harmonise the melody, or rewrite the melody into a mode that doesn't quite fit yet (for example, E becomes E♭ for C Dorian). The rewrite counts as an edit, so Undo takes it back.
-- **Playback.** Plays the notes, the notes with backing chords, or your original hum, so you can compare by ear.
+- **Key and chords.** Guesses the key with Krumhansl–Kessler key profiles, penalising keys that would make your notes "wrong", then picks a chord for each part of the melody. You can override the home note. Tap a chord to hear it and see why it fits ("Your E is the 3rd of C").
+- **Moods.** Hum once, then hear the same tune as Bright, Bittersweet, Dark, Hopeful minor, Bluesy, Dreamy, Epic, Jazzy or Floating. A mood never changes a note: it only changes the chords underneath. Each mood is a recipe (which chords, which moves between them, which colour notes, how it ends, how often the chords change), and a small search (a k-best Viterbi) finds the progression that fits your melody best, plus other versions to try. Every chord supports the important notes over it, or is marked as borrowed from outside the mood.
+- **Mood journeys.** Change mood partway through: presets like Bright → Dark, or Dark → Hopeful (which ends on a major chord, the "Picardy third"), or tap any part of the mood strip to set its mood yourself. Where the mood changes, the app looks for a chord both moods share, or leads in with a V7, so the change sounds intentional.
+- **Playback.** Plays the notes, the notes with the chosen chords (the keyboard follows along), or your original hum, so you can compare by ear.
 - **MIDI export.** Saves the melody and chords as a `.mid` file you can drop into Reaper or any DAW.
 - **Input options.** Works with the mic, with an uploaded voice memo, or with the built-in sample hums.
 
@@ -73,7 +74,10 @@ src/core/      pure logic: no DOM, no Web Audio, runs in Node
   notes.js     pitch frames → stable notes (smoothing, segmentation, tuning offset)
   intent.js    pick the note you meant: follows drift, weighs the key and nearby notes
   rhythm.js    tempo, time signatures, beat grid, tap tempo
-  theory.js    key guess, chord suggestions, guitar fingering, staff spelling
+  theory.js    key guess, phrase slots, chords for a note, guitar fingering, staff spelling
+  harmony.js   chords for a melody in a mood or a journey of moods (never changes the notes)
+  moods.js     the nine moods and the journey presets, as data
+  modes.js     the seven modes, and spelling notes by scale degree
   midi.js      Standard MIDI File writer
   wav.js       WAV writer and reader (test hums carry their answer key inside)
   demo.js      synthetic hum generator (samples and tests)

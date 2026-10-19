@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { harmonise, parseNumeral, chordFor, noteRole, supports, paletteFor, CHORD_TYPES } from '../src/core/harmony.js';
 import { MOODS, moodById, recipeFor, JOURNEYS, journeyById, journeyFor } from '../src/core/moods.js';
-import { phraseSlots } from '../src/core/theory.js';
+import { phraseSlots, voiceChord } from '../src/core/theory.js';
+import { toMidiFile } from '../src/core/midi.js';
 import { DEMO_MELODIES } from '../src/core/demo.js';
 
 const mel = (name) => DEMO_MELODIES[name].map(([m, b], i, a) => {
@@ -271,4 +272,64 @@ test('Dark → Hopeful ends on the major home chord (the Picardy lift)', () => {
 
 test('journeys are repeatable', () => {
   for (const j of JOURNEYS) assert.deepEqual(run('Für Elise', j).vs, run('Für Elise', j).vs);
+});
+
+// ---------- Playback and MIDI ----------
+
+/** Read back a format-1 MIDI file: each track's note-ons as [tick, note]. */
+function noteOns(bytes) {
+  const tracks = [];
+  let i = 14;
+  while (i < bytes.length) {
+    const len = (bytes[i + 4] << 24) | (bytes[i + 5] << 16) | (bytes[i + 6] << 8) | bytes[i + 7];
+    let j = i + 8, tick = 0;
+    const end = j + len, ons = [];
+    while (j < end) {
+      let d = 0;
+      do { d = (d << 7) | (bytes[j] & 0x7f); } while (bytes[j++] & 0x80);
+      tick += d;
+      const st = bytes[j];
+      if (st === 0xff) { j += 3 + bytes[j + 2]; continue; }
+      if ((st & 0xf0) === 0x90) ons.push([tick, bytes[j + 1]]);
+      j += 3;
+    }
+    tracks.push(ons);
+    i = end;
+  }
+  return tracks;
+}
+
+test('the MIDI chord track plays exactly the chords of the journey', () => {
+  const notes = mel('Ode to Joy');
+  const prog = harmonise(notes, { journey: ['bright', 'bright', 'dark', 'dark'] })[0];
+  const [, , chords] = noteOns(toMidiFile(notes, prog));
+  const byTick = new Map();
+  for (const [t, m] of chords) byTick.set(t, [...(byTick.get(t) || []), m]);
+  const heard = [...byTick.values()].map((ms) => [...new Set(ms.map(pcOf))].sort((a, b) => a - b));
+  assert.deepEqual(heard, prog.map((e) => [...e.chord.tones].sort((a, b) => a - b)));
+  // A slash chord's bass is its lowest note.
+  const slash = chordFor(C, '♭VII/1');
+  const [, , one] = noteOns(toMidiFile(notes.slice(0, 1), [{ chord: slash, start: notes[0].start, end: notes[0].end }]));
+  assert.equal(pcOf(Math.min(...one.map(([, m]) => m))), 0);
+});
+
+test('slash chords and 7ths are voiced over the right bass', () => {
+  const [bass, ...upper] = voiceChord(chordFor(C, '♭VII/1'));
+  assert.equal(bass % 12, 0);                                       // C underneath
+  assert.deepEqual(upper.map((m) => m % 12).sort((a, b) => a - b), [2, 5, 10]); // B♭ D F
+  assert.ok(bass < upper[0]);
+  const g7 = voiceChord(chordFor(C, 'V7'));
+  assert.equal(g7[0] % 12, 7);
+  assert.equal(g7.length, 5);
+});
+
+test('a V7 into a new mood is only a turnaround when no pivot fits', () => {
+  // Ode to Joy as the app detects the sample (an octave down, real note lengths).
+  const hummed = [[52, 0.63], [52, 0.59], [53, 0.6], [55, 0.6], [55, 0.59], [53, 0.6], [52, 0.6], [50, 0.59],
+    [48, 0.51], [48, 0.62], [50, 0.59], [52, 0.6], [52, 0.91], [50, 0.29], [50, 1.11]];
+  let t = 0;
+  const notes = hummed.map(([midi, d]) => { const n = { midi, start: t, end: t + d }; t += d + 0.07; return n; });
+  const [prog] = harmonise(notes, { journey: ['bright', 'bright', 'dark', 'dark'] });
+  // Am fits where Dark begins and is in both moods, so G7 → C (borrowed) mustn't win.
+  assert.ok(prog.every((e) => !e.borrowed), prog.map((e) => e.chord.name).join(' '));
 });

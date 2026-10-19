@@ -49,8 +49,10 @@ export function toMidiFile(notes, progression = []) {
     const base = Math.floor((lowest - 7) / 12) * 12;
     progression.forEach((p, i) => {
       const end = progression[i + 1] ? progression[i + 1].start : p.end;
+      // A slash chord's bass note goes underneath (B♭/C: C, then B♭ D F).
+      const slash = p.chord.bass != null && p.chord.bass !== p.chord.root;
       p.chord.tones.forEach((pc) => {
-        const m = base + pc;
+        const m = slash && pc === p.chord.bass ? base - 12 + pc : base + pc;
         ch.push({ tick: ticks(p.start - offset), order: 1, bytes: [0x91, m, 64] });
         ch.push({ tick: ticks(end - offset), order: 0, bytes: [0x81, m, 0] });
       });

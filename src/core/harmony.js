@@ -256,6 +256,7 @@ function joinMoods(notes, spans, cands, home) {
       }
     }
     if (pivots) continue;
+    after.turnaround = true;
     for (const target of cands[s].filter((c) => !c.borrowed)) {
       const chord = chordFromRoot(home, (target.chord.root + 7) % 12, '7');
       const have = cands[s - 1].find((c) => c.chord.name === chord.name);
@@ -279,8 +280,8 @@ function addLift(notes, sp, list, home) {
 function moveScore(a, b, sp, final, home) {
   const r = recipeFor(sp.mood, home);
   let s = r.moves?.[`${a.base}>${b.base}`] ?? 0;
-  // A turnaround into a new mood: a dominant 7th resolving down a fifth.
-  if (sp.change && a.type === '7' && (a.root - b.root + 12) % 12 === 7) s += 0.9;
+  // A turnaround into a new mood (only where no pivot fits): a dominant 7th resolving down a fifth.
+  if (sp.turnaround && a.type === '7' && (a.root - b.root + 12) % 12 === 7) s += 0.9;
   s += 0.04 * Math.min(3, a.tones.filter((t) => b.tones.includes(t)).length); // smooth voice leading
   if (sp.mood.thirds && [3, 4, 8, 9].includes((b.root - a.root + 12) % 12)) s += sp.mood.thirds;
   if (sp.mood.heldBass && b.bass != null && b.bass === (a.bass ?? a.root)) s += sp.mood.heldBass;

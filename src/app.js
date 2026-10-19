@@ -3,7 +3,7 @@
 import { analyseBuffer, levelStats } from './core/pitch.js';
 import { midiToName, centsOff } from './core/notes.js';
 import { transcribe } from './core/intent.js';
-import { guessKey, keyUsesFlats, suggestChords, fingerMelody, chordsWithNote, voiceChord } from './core/theory.js';
+import { guessKey, keyName, keyUsesFlats, phraseSlots, fingerMelody, chordsWithNote, voiceChord } from './core/theory.js';
 import { synthHum, DEMO_MELODIES } from './core/demo.js';
 import { toMidiFile } from './core/midi.js';
 import {
@@ -15,7 +15,8 @@ import { blocksView, fretboardView, pianoView, staffView, drawTrace } from './ui
 import { createRoll } from './ui/roll.js';
 import { createMetronomePanel } from './ui/metronome-panel.js';
 import { testModeOn, turnOffTestMode, testHumFile, shareOrDownload } from './ui/test-mode.js';
-import { rankModes, defaultModeId, rewriteInMode, prefersFlats } from './core/modes.js';
+import { harmonise, paletteFor } from './core/harmony.js';
+import { MOODS, moodById, JOURNEYS, journeyById, journeyFor } from './core/moods.js';
 
 const $ = (id) => document.getElementById(id);
 const inArtifact = typeof window.claude === 'object' && window.claude !== null;
@@ -50,11 +51,17 @@ const state = {
   playhead: null,
   mic: null,
   trust: loadTrust(),
-  modeId: null,      // mood the user picked (null = follow the detected key)
-  tonic: null,       // home note, locked once a mood is picked
-  modes: [], mode: null,
+  moodId: null,      // mood the user picked (null = automatic: Bright in a major key, Dark in minor)
+  homeKey: null,     // home key the user picked ({tonic, mode}); null = the guessed key
+  journeyId: 'steady', // a preset from JOURNEYS, or 'custom' after editing the mood strip
+  strip: null,       // the mood of each part, once edited by hand (else it comes from the preset)
+  stripSel: null,    // the part selected on the mood strip
+  versions: {},      // which variation ("Try another version") each mood, or 'journey', is showing
+  playingProg: null, // the chords being played, so the keyboard can follow them
   // derived
-  notes: [], key: null, keys: [], flats: false, fingering: [], progression: [], palette: [], chordsAt: new Map(),
+  notes: [], key: null, keys: [], home: null, flats: false, fingering: [],
+  slots: [], journey: [], mood: null, variants: [], progression: [], palette: [], chordsAt: new Map(),
+  cards: {},          // each mood card's progression, as shown
   noteChords: [],     // chords containing the note in focus (playing, else selected)
 };
 
@@ -70,8 +77,9 @@ function setAnalysis({ frames, recording }) {
   state.recording = recording;
   state.selected = null;
   state.chordTones = [];
-  state.modeId = null;
-  state.tonic = null;
+  // A new tune: new key, new parts. The chosen mood (or preset journey) carries over.
+  Object.assign(state, { homeKey: null, strip: null, stripSel: null, versions: {} });
+  if (state.journeyId === 'custom') state.journeyId = 'steady';
   derive();
   renderAll();
 }
@@ -81,23 +89,38 @@ function derive() {
   state.notes = state.detected.map((n) => ({ ...n, midi: n.midi + shift, nearest: n.nearest == null ? null : n.nearest + shift }));
   state.keys = guessKey(state.notes);
   state.key = state.keys[0] || null;
-  state.flats = state.key ? keyUsesFlats(state.key) : false;
+  state.home = state.homeKey || state.key;
+  state.flats = state.home ? keyUsesFlats(state.home) : false;
 
-  // Moods (modes) around the home note; the chosen one supplies the chord set.
-  const tonic = state.tonic ?? state.key?.tonic;
-  const auto = defaultModeId(state.key, state.notes);
-  state.modes = tonic != null && state.notes.length ? rankModes(state.notes, tonic, state.modeId || auto) : [];
-  state.mode = state.modes.find((m) => m.mode.id === (state.modeId || auto)) || state.modes[0] || null;
-  if (state.mode && state.modeId) state.flats = prefersFlats(state.notes, tonic, state.mode.mode);
+  // The mood of each part (slot), from the strip, a preset journey, or one mood throughout.
+  // Moods only ever choose chords: the notes are left exactly as they are.
+  state.slots = phraseSlots(state.notes);
+  state.mood = moodById(state.moodId || (state.home?.mode === 'minor' ? 'dark' : 'bright'));
+  const preset = journeyById(state.journeyId);
+  if (state.strip) state.journey = fitStrip(state.strip, state.slots.length);
+  else if (preset?.moods) state.journey = journeyFor(preset, state.slots);
+  else state.journey = state.slots.map(() => state.mood.id);
+  if (state.stripSel != null && state.stripSel >= state.slots.length) state.stripSel = null;
 
-  const { progression } = suggestChords(state.notes, state.key, { chords: state.mode?.chords });
-  const palette = (state.mode?.chords || [])
-    .filter((c) => c.quality !== 'dim')
-    .sort((a, b) => b.weight - a.weight || a.degree - b.degree);
-  state.progression = progression;
-  state.palette = palette;
-  state.chordsAt = new Map(progression.map((p) => [p.firstIndex, p.chord]));
+  state.variants = state.home && state.notes.length
+    ? harmonise(state.notes, { home: state.home, slots: state.slots, journey: state.journey, lift: !state.strip && !!preset?.lift })
+    : [];
+  const v = state.versions[versionKey()] || 0;
+  state.progression = state.variants.length ? state.variants[v % state.variants.length] : [];
+  state.chordsAt = new Map(state.progression.map((p) => [p.firstIndex, p.chord]));
+  const focus = moodById(state.stripSel != null ? state.journey[state.stripSel] : state.journey[0]) || state.mood;
+  state.palette = state.home ? paletteFor(focus, state.home) : [];
   state.fingering = fingerMelody(state.notes);
+}
+
+/** One mood all the way through? Then "Try another version" belongs to that mood's card. */
+const steady = () => !state.strip && !journeyById(state.journeyId)?.moods;
+const versionKey = () => (steady() ? state.mood.id : 'journey');
+
+/** Keep a hand-made strip the right length when edits change the number of parts. */
+function fitStrip(strip, n) {
+  if (strip.length === n) return strip;
+  return Array.from({ length: n }, (_, i) => strip[Math.min(i, strip.length - 1)]);
 }
 
 // ---------- Rendering ----------
@@ -150,6 +173,7 @@ function renderAll() {
   renderBlocks();
   renderInstrument();
   renderChords();
+  renderJourney();
   renderTrace();
   const has = state.notes.length > 0;
   for (const id of ['play-notes', 'play-chords', 'midi']) $(id).disabled = !has;
@@ -177,15 +201,18 @@ function renderFacts() {
   const lo = Math.min(...mids), hi = Math.max(...mids);
   const tune = Math.round(state.tuning * 100);
   const fact = (label, v, small = '') => `<div class="fact"><span class="label">${label}</span><span class="v">${v}${small ? `<small>${small}</small>` : ''}</span></div>`;
+  const preset = journeyById(state.journeyId);
   el.innerHTML = [
-    state.modeId && state.mode
-      ? fact('Mood', state.mode.name, 'picked by you')
+    state.homeKey
+      ? fact('Home key', keyName(state.homeKey), 'picked by you')
       : fact('Likely key', k1.name, close ? `or ${k2.name}` : ''),
+    state.strip ? fact('Mood', 'Your own mix')
+      : preset?.moods ? fact('Mood', preset.name)
+      : fact('Mood', state.mood.name, state.moodId ? 'picked by you' : ''),
     fact('Notes', state.notes.length),
     fact('Range', `${midiToName(lo, { flats: state.flats })}–${midiToName(hi, { flats: state.flats })}`),
     fact('Your tuning', Math.abs(tune) < 8 ? 'Spot on' : `${Math.abs(tune)}¢ ${tune > 0 ? 'sharp' : 'flat'}`, Math.abs(tune) >= 8 ? 'corrected for you' : ''),
   ].join('');
-  $('key-label').textContent = state.mode ? `Home note ${state.mode.name.split(' ')[0]}` : '';
 }
 
 function renderBlocks() {
@@ -215,58 +242,188 @@ function renderInstrument() {
 }
 
 function renderChords() {
-  const chip = (c, sub, i, kind) => `<button type="button" class="chip${c.signature ? ' sig' : ''}" data-kind="${kind}" data-i="${i}"><b>${c.name}</b><span>${sub}</span></button>`;
+  const chip = (c, sub, i, kind, extra = '') => `<button type="button" class="chip${extra}" data-kind="${kind}" data-i="${i}"><b>${c.name}</b><span>${sub}</span></button>`;
+  const notesOf = (p) => (p.noteCount > 1 ? `notes ${p.firstIndex + 1}–${p.firstIndex + p.noteCount}` : `note ${p.firstIndex + 1}`);
+  const tag = (p) => (p.pivot ? ' · pivot' : p.turnaround ? ' · turnaround' : p.lift ? ' · lift' : p.borrowed ? ' · borrowed' : '');
   $('progression').innerHTML = state.progression.length
-    ? state.progression.map((p, i) => chip(p.chord, `${p.chord.numeral} · notes ${p.firstIndex + 1}–${p.firstIndex + p.noteCount}`, i, 'prog')).join('')
+    ? state.progression.map((p, i) => chip(p.chord, `${p.roman} · ${notesOf(p)}${tag(p)}`, i, 'prog', p.borrowed ? ' borrowed' : '')).join('')
     : '<div class="empty">Chords appear once there are notes.</div>';
-  $('palette').innerHTML = state.palette.map((c, i) => chip(c, c.signature ? `${c.numeral} · signature` : c.numeral, i, 'pal')).join('');
-  $('prog-label').textContent = state.mode ? `For each phrase, in order · ${state.mode.name}` : 'For each phrase, in order';
-  $('palette-label').textContent = state.mode ? `All chords in ${state.mode.name}` : 'Other chords';
-  renderModes();
+  $('chord-why').textContent = state.progression.length ? 'Tap a chord to hear it and see why it fits.' : '';
+  $('palette').innerHTML = state.palette.map((c, i) => chip(c, c.numeral, i, 'pal')).join('');
+  const focus = moodById(state.stripSel != null ? state.journey[state.stripSel] : state.journey[0]) || state.mood;
+  $('prog-label').textContent = `For each part, in order · ${steady() ? state.mood.name : journeyById(state.journeyId)?.name || 'your own mix'}`;
+  $('palette-label').textContent = `All chords in ${focus.name}`;
+  renderHomePicker();
+  renderMoods();
   renderNoteChords();
 }
 
-/** One card per mood: does the melody fit, what gives it its colour, its signature progression. */
-function renderModes() {
-  const chosen = state.mode?.mode.id;
-  $('modes').innerHTML = state.modes.map((r) => {
-    const sig = r.mode.prog.map((d) => r.chords[d]);
-    const fits = r.fit >= 0.999;
-    const fitLine = fits
-      ? '<span class="fit ok">✓ Fits your melody as hummed</span>'
-      : `<span class="fit change">Change ${r.clashes.join(', ')} to go this way</span>`;
-    const on = r.mode.id === chosen;
-    return `<article class="mode${on ? ' on' : ''}" aria-current="${on}">
-      <h3>${r.name}${r.mode.alt ? `<small>${r.mode.alt}</small>` : ''}</h3>
-      <p>${r.mode.mood}</p>
-      ${fitLine}
-      <div class="sig"><span>${sig.map((c) => `<b>${c.name}</b>`).join(' → ')}</span><span class="nums">${sig.map((c) => c.numeral).join(' – ')}</span></div>
-      <p class="colour"><b>${r.colourNote}</b> is the key note here: ${r.mode.charText}.${r.showsColour ? ' Your melody already uses it.' : ''}</p>
+/** The home note: the guessed key, or one the user picks. */
+function renderHomePicker() {
+  const sel = $('home-key');
+  const keys = [];
+  for (let t = 0; t < 12; t++) for (const mode of ['major', 'minor']) keys.push({ tonic: t, mode });
+  sel.innerHTML = `<option value="">${state.key ? `Auto: ${state.key.name}` : 'Auto'}</option>`
+    + keys.map((k) => `<option value="${k.tonic}:${k.mode}">${keyName(k)}</option>`).join('');
+  sel.value = state.homeKey ? `${state.homeKey.tonic}:${state.homeKey.mode}` : '';
+}
+
+const attr = (s) => String(s).replace(/"/g, '&quot;');
+
+/** Short chord list for a card: repeats joined, and long tunes trimmed. */
+function progChips(prog, max = 8) {
+  const parts = prog.filter((p, i) => i === 0 || p.chord.name !== prog[i - 1].chord.name);
+  const chips = parts.slice(0, max).map((p) => `<span class="pc${p.borrowed ? ' borrowed' : ''}" title="${attr(p.why)}"><b>${p.chord.name}</b><i>${p.roman}</i></span>`);
+  if (parts.length > max) chips.push(`<span class="more">+${parts.length - max} more</span>`);
+  return chips.join('');
+}
+
+/** One card per mood: your melody's chords in that mood, to hear, use or vary. */
+function renderMoods() {
+  const box = $('moods');
+  state.cards = {};
+  if (!state.home || !state.notes.length) { box.innerHTML = ''; return; }
+  const part = state.stripSel;
+  box.innerHTML = MOODS.map((m) => {
+    const vs = harmonise(state.notes, { home: state.home, slots: state.slots, journey: m.id });
+    const k = (state.versions[m.id] || 0) % Math.max(1, vs.length);
+    const prog = vs[k] || [];
+    state.cards[m.id] = prog;
+    const on = part != null ? state.journey[part] === m.id : steady() && state.mood.id === m.id;
+    const use = on ? '<button type="button" disabled>Using this</button>'
+      : `<button type="button" class="primary" data-act="use" data-id="${m.id}">${part != null ? `Use for part ${part + 1}` : 'Use this mood'}</button>`;
+    return `<article class="mood${on ? ' on' : ''}" aria-current="${on}">
+      <h3>${m.name}<small>${m.theory}</small></h3>
+      <p>${m.feel}</p>
+      <div class="prog">${progChips(prog)}</div>
       <div class="row">
-        <button type="button" data-act="hear" data-id="${r.mode.id}">▶ Hear it</button>
-        ${on ? '<button type="button" disabled>Using this</button>'
-          : fits ? `<button type="button" class="primary" data-act="use" data-id="${r.mode.id}">Use these chords</button>`
-          : `<button type="button" data-act="rewrite" data-id="${r.mode.id}">Rewrite melody in ${r.mode.name}</button>`}
+        <button type="button" data-act="hear" data-id="${m.id}">▶ Hear it</button>
+        ${use}
+        ${vs.length > 1 ? `<button type="button" data-act="again" data-id="${m.id}">Try another version <span class="ver">${k + 1}/${vs.length}</span></button>` : ''}
       </div>
     </article>`;
   }).join('');
 }
 
-function onModeAction(e) {
+function onMoodAction(e) {
   const btn = e.target.closest('button[data-act]');
   if (!btn) return;
-  const r = state.modes.find((m) => m.mode.id === btn.dataset.id);
-  if (!r) return;
+  const mood = moodById(btn.dataset.id);
+  if (!mood) return;
   if (btn.dataset.act === 'hear') {
-    playSequence([...r.mode.prog.map((d) => voiceChord(r.chords[d])), voiceChord(r.chords[0])]);
+    playMelody(state.cards[mood.id]);
+    setStatus(`Playing your melody in ${mood.name}. The notes are the same: only the chords changed.`);
   } else if (btn.dataset.act === 'use') {
-    state.tonic = r.tonic;
-    state.modeId = r.mode.id;
+    if (state.stripSel != null) {
+      setPartMood(state.stripSel, mood.id);
+    } else {
+      Object.assign(state, { moodId: mood.id, journeyId: 'steady', strip: null });
+      derive(); renderAll();
+      setStatus(`Chords now follow ${mood.name}. Your notes haven't changed. Press "Play with chords" to hear it.`);
+    }
+  } else if (btn.dataset.act === 'again') {
+    state.versions[mood.id] = (state.versions[mood.id] || 0) + 1;
     derive(); renderAll();
-    setStatus(`Chords now follow ${r.name}. Press "Play with chords" to hear your melody in this mood.`);
-  } else if (btn.dataset.act === 'rewrite') {
-    applyEdit({ type: 'mode', modeId: r.mode.id, tonic: r.tonic });
+    setStatus(`Another version of ${mood.name}.`);
   }
+}
+
+// ---------- Mood strip and journeys ----------
+
+function renderJourney() {
+  const has = state.notes.length > 0;
+  $('journey').hidden = !has;
+  if (!has) return;
+  $('presets').innerHTML = JOURNEYS.map((j) => `<button type="button" data-journey="${j.id}" aria-pressed="${!state.strip && state.journeyId === j.id}" title="${attr(j.about)}">${j.id === 'steady' ? `Steady (${state.mood.name})` : j.name}</button>`).join('')
+    + (state.strip ? '<button type="button" aria-pressed="true" disabled>Your own mix</button>' : '');
+  $('journey-again').disabled = state.variants.length < 2;
+  const chordsIn = (i) => state.progression.filter((p) => p.slots.includes(i)).map((p) => p.chord.name)
+    .filter((n, k, a) => n !== a[k - 1]).join(' ');
+  $('strip').innerHTML = state.slots.map((sl, i) => {
+    const first = state.notes[sl.first], last = state.notes[sl.first + sl.count - 1];
+    const w = Math.round(Math.max(56, Math.min(200, (last.end - first.start) * 45)));
+    const mood = moodById(state.journey[i]);
+    return `<button type="button" class="part${i === state.stripSel ? ' sel' : ''}" data-part="${i}" data-mood="${mood.id}" style="width:${w}px"
+      aria-pressed="${i === state.stripSel}" aria-label="Part ${i + 1}, notes ${sl.first + 1} to ${sl.first + sl.count}: ${mood.name}">
+      <b>${mood.name}</b><span>${chordsIn(i) || '&nbsp;'}</span></button>`;
+  }).join('');
+  const pick = $('strip-pick');
+  pick.hidden = state.stripSel == null;
+  if (pick.hidden) return;
+  const i = state.stripSel, sl = state.slots[i];
+  pick.innerHTML = `<p>Part ${i + 1} (notes ${sl.first + 1}–${sl.first + sl.count}): pick its mood.</p>
+    <div class="opts">${MOODS.map((m) => `<button type="button" data-pick="${m.id}" aria-pressed="${state.journey[i] === m.id}">${m.name}</button>`).join('')}
+    <button type="button" data-pick="" class="tool">Done</button></div>`;
+}
+
+/** Give one part (or every part from it to the end) its own mood. */
+function setPartMood(i, id, toEnd = false) {
+  const strip = [...state.journey];
+  for (let k = i; k < (toEnd ? strip.length : i + 1); k++) strip[k] = id;
+  Object.assign(state, { strip, journeyId: 'custom' });
+  state.versions.journey = 0;
+  derive(); renderAll();
+  const name = moodById(id).name;
+  setStatus(toEnd && i < strip.length - 1
+    ? `Parts ${i + 1}–${strip.length} are now ${name}. Only the chords changed.`
+    : `Part ${i + 1} is now ${name}. Only the chords changed.`);
+}
+
+function initStrip() {
+  $('presets').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-journey]');
+    if (!b) return;
+    Object.assign(state, { journeyId: b.dataset.journey, strip: null, stripSel: null });
+    state.versions.journey = 0;
+    derive(); renderAll();
+    const j = journeyById(state.journeyId);
+    setStatus(j.moods ? `${j.name}: ${j.about} Press "Play with chords" to hear it.` : `One mood all the way through: ${state.mood.name}.`);
+  });
+  $('journey-again').addEventListener('click', () => {
+    const k = versionKey();
+    state.versions[k] = (state.versions[k] || 0) + 1;
+    derive(); renderAll();
+    setStatus('Another version of the chords. Your notes are the same.');
+  });
+  $('strip-pick').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-pick]');
+    if (!b) return;
+    if (!b.dataset.pick) { state.stripSel = null; derive(); renderAll(); return; }
+    setPartMood(state.stripSel, b.dataset.pick);
+  });
+  // Tap a part to select it; press and hold to copy its mood to the end.
+  const strip = $('strip');
+  let hold = null;
+  const cancel = () => { if (hold) clearTimeout(hold.timer); };
+  strip.addEventListener('pointerdown', (e) => {
+    const part = e.target.closest('.part');
+    if (!part) return;
+    cancel();
+    const i = Number(part.dataset.part);
+    hold = { x: e.clientX, y: e.clientY, i, fired: false };
+    hold.timer = setTimeout(() => {
+      hold.fired = true;
+      state.stripSel = null;
+      setPartMood(i, state.journey[i], true);
+      navigator.vibrate?.(15);
+    }, 550);
+  });
+  strip.addEventListener('pointermove', (e) => {
+    if (hold && !hold.fired && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 10) { cancel(); hold = null; }
+  });
+  strip.addEventListener('pointercancel', () => { cancel(); hold = null; });
+  strip.addEventListener('contextmenu', (e) => e.preventDefault());
+  // The click comes after the hold fired (and the strip was redrawn): swallow it then.
+  strip.addEventListener('click', (e) => {
+    const fired = hold?.fired;
+    cancel();
+    hold = null;
+    const part = e.target.closest('.part');
+    if (!part || fired) return;
+    const i = Number(part.dataset.part);
+    state.stripSel = state.stripSel === i ? null : i;
+    derive(); renderAll();
+  });
 }
 
 /** Chords that contain the note playing now, or else the note you tapped. */
@@ -280,7 +437,7 @@ function renderNoteChords() {
     box.innerHTML = '<div class="empty">Tap a note, or press Play, to see the chords that have that note in them.</div>';
     return;
   }
-  state.noteChords = chordsWithNote(n.midi, state.key);
+  state.noteChords = chordsWithNote(n.midi, state.home);
   const name = midiToName(n.midi, { flats: state.flats, octave: false }).replace('#', '♯').replace('b', '♭');
   const outside = !state.noteChords[0]?.inKey;
   $('note-chords-label').textContent = `Chords with ${name} in them${outside && state.key ? ' (this note is outside the key)' : ''}`;
@@ -458,18 +615,23 @@ function loadSample(name) {
 }
 
 const tick = (i, t) => {
-  if (i !== state.active) { state.active = i; renderActive(); }
+  if (i !== state.active) {
+    state.active = i;
+    // Playing with chords: the keyboard lights up the chord under each note.
+    const p = i != null && state.playingProg?.find((x) => i >= x.firstIndex && i < x.firstIndex + x.noteCount);
+    if (p) state.chordTones = p.chord.tones;
+    else if (t == null && state.playingProg) { state.chordTones = []; state.playingProg = null; }
+    renderActive();
+  }
   state.playhead = t;
   renderTrace();
   roll.playhead(t);
 };
 
-function playMelody(withChords) {
-  playNotes(state.notes, {
-    timbre: state.instrument,
-    progression: withChords ? state.progression : null,
-    onTick: tick,
-  });
+/** Play the notes, with a progression underneath (or none). */
+function playMelody(progression = null) {
+  state.playingProg = progression;
+  playNotes(state.notes, { timbre: state.instrument, progression, onTick: tick });
 }
 
 async function saveMidi() {
@@ -522,18 +684,6 @@ function applyEdit(edit) {
     case 'split': after = splitNote(before, i); break;
     case 'merge': after = mergeWithNext(before, i); break;
     case 'guess': after = resolveGuess(before, i, edit.keep); break;
-    case 'mode': {
-      const r = state.modes.find((m) => m.mode.id === edit.modeId);
-      if (!r) return;
-      const res = rewriteInMode(before, edit.tonic, r.mode);
-      after = res.notes.map((n, k) => (n === before[k] ? n : { ...n, adjusted: false }));
-      state.tonic = edit.tonic;
-      state.modeId = edit.modeId;
-      edit.changes = res.changes;
-      edit.name = r.name;
-      if (!res.changes.length) { derive(); renderAll(); return; }
-      break;
-    }
     case 'reset': after = state.original; break;
     case 'undo': after = state.history.undo() ?? before; break;
     default: return;
@@ -566,7 +716,6 @@ function applyEdit(edit) {
     add: () => 'Note added. Drag it into place.',
     split: () => 'Note split in two.',
     merge: () => 'Joined with the next note.',
-    mode: () => `Rewrote your melody in ${edit.name}: ${edit.changes.map((c) => `${c.from} → ${c.to}`).join(', ')}. Press Undo to go back.`,
     guess: () => (edit.keep ? `Kept ${midiToName(sel.midi, { flats: state.flats })}.` : `Changed to ${midiToName(sel.midi, { flats: state.flats })}, the note closest to what you hummed.`),
     reset: () => 'Back to exactly what you hummed.',
     undo: () => 'Undone.',
@@ -620,7 +769,14 @@ function init() {
   $('ed-done').addEventListener('click', () => { state.selected = null; renderRoll(); renderBlocks(); renderInstrument(); renderNoteChords(); });
   $('zoom-in').addEventListener('click', () => roll.zoom(1.5));
   $('zoom-out').addEventListener('click', () => roll.zoom(1 / 1.5));
-  $('modes').addEventListener('click', onModeAction);
+  $('moods').addEventListener('click', onMoodAction);
+  initStrip();
+  $('home-key').addEventListener('change', (e) => {
+    const [tonic, mode] = e.target.value.split(':');
+    state.homeKey = e.target.value ? { tonic: Number(tonic), mode } : null;
+    derive(); renderAll();
+    setStatus(state.homeKey ? `Home note set to ${keyName(state.homeKey)}. The chords now centre on it.` : 'Home note follows the key the app hears again.');
+  });
   $('guess-undo').addEventListener('click', () => applyEdit({ type: 'guess', keep: false }));
 
   const sel = $('sample');
@@ -628,8 +784,8 @@ function init() {
   sel.addEventListener('change', () => loadSample(sel.value));
   $('rec').addEventListener('click', toggleRecording);
   $('file').addEventListener('change', onFile);
-  $('play-notes').addEventListener('click', () => playMelody(false));
-  $('play-chords').addEventListener('click', () => playMelody(true));
+  $('play-notes').addEventListener('click', () => playMelody());
+  $('play-chords').addEventListener('click', () => playMelody(state.progression));
   $('play-hum').addEventListener('click', () => state.recording && playRecording(state.recording, { onTick: tick }));
   $('midi').addEventListener('click', saveMidi);
   // Downloads started by the page are blocked inside a Claude artifact; MIDI export is for the hosted version.
@@ -666,6 +822,7 @@ function init() {
     const chord = kind === 'prog' ? state.progression[i].chord : kind === 'note' ? state.noteChords[i] : state.palette[i];
     document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c === chip));
     state.chordTones = chord.tones;
+    if (kind === 'prog') $('chord-why').textContent = state.progression[i].why;
     playOnce(voiceChord(chord), 'piano');
     if (state.instrument === 'piano') renderInstrument();
   };

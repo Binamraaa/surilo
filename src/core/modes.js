@@ -1,6 +1,6 @@
-// Modes: the same home note, different "moods". A hum usually uses only 5–6
-// different notes, so several modes can fit it. Each one suggests a different
-// direction for the chords underneath.
+// Modes: the seven scales around a home note, and spelling by scale degree.
+// The moods (moods.js, harmony.js) build on these for chord names; they never
+// change the melody, so nothing here rewrites notes any more.
 //
 // Everything here is relative to a home note (tonic, pitch class 0–11).
 
@@ -134,75 +134,4 @@ export function modeChords(tonic, mode) {
       signature: sigDegrees.has(i) && i !== 0,
     };
   });
-}
-
-/**
- * Which modes (around `tonic`) can this melody live in?
- * fit = share of melody time on notes inside the mode (1 = every note fits).
- * clashes = pitch classes the melody uses that the mode doesn't have.
- * showsColour = the melody actually sings the mode's characteristic note.
- * preferId = the mode matching the detected key, listed first among equals.
- */
-export function rankModes(notes, tonic, preferId = null) {
-  if (!notes.length) return [];
-  const dur = new Array(12).fill(0);
-  for (const n of notes) dur[(((n.midi - tonic) % 12) + 12) % 12] += Math.max(0.05, n.end - n.start);
-  const total = dur.reduce((a, b) => a + b, 0);
-  const used = dur.map((d) => d > 0);
-
-  return MODES.map((mode, order) => {
-    const inScale = new Set(mode.steps);
-    let fit = 0;
-    const clashes = [];
-    dur.forEach((d, iv) => {
-      if (!d) return;
-      if (inScale.has(iv)) fit += d;
-      else clashes.push((tonic + iv) % 12);
-    });
-    fit /= total;
-    const charIv = mode.steps[mode.char];
-    const showsColour = used[charIv];
-    // On ties: the mode matching the detected key first, then familiar-first order.
-    const score = fit + (showsColour ? 0.05 : 0) + (mode.id === preferId ? 0.01 : 0) - order * 0.001;
-    return {
-      mode, tonic, fit, showsColour, score,
-      name: `${spell(tonic, mode, 0, 0)} ${mode.name}`,
-      // A clashing note is named after the scale degree it would replace.
-      clashes: clashes.map((pc) => { const iv = (pc - tonic + 12) % 12; return spell(tonic, mode, iv, DEGREE_OF[iv]); }),
-      colourNote: spell(tonic, mode, charIv, mode.char),
-      chords: modeChords(tonic, mode),
-    };
-  }).sort((a, b) => b.score - a.score);
-}
-
-/** The mode that matches a detected key, used as the default. */
-export function defaultModeId(key, notes = []) {
-  if (!key) return 'ionian';
-  if (key.mode === 'major') return 'ionian';
-  // A minor melody that sings the raised 7th is harmonic minor.
-  const lead = (key.tonic + 11) % 12;
-  return notes.some((n) => ((n.midi % 12) + 12) % 12 === lead) ? 'harmonic' : 'aeolian';
-}
-
-
-/**
- * Rewrite a melody into a mode, degree by degree: in C Dorian every E becomes E♭,
- * in C Lydian every F becomes F♯. Notes already in the mode are untouched.
- * Returns {notes, changes:[{from, to}]} — pitch-class names for the UI.
- */
-export function rewriteInMode(notes, tonic, mode) {
-  const inScale = new Set(mode.steps);
-  const seen = new Map();
-  const out = notes.map((n) => {
-    const iv = (((n.midi - tonic) % 12) + 12) % 12;
-    if (inScale.has(iv)) return n;
-    const target = mode.steps[DEGREE_OF[iv]];
-    let delta = target - iv;
-    if (delta > 6) delta -= 12;
-    if (delta < -6) delta += 12;
-    const d = DEGREE_OF[iv];
-    seen.set(iv, { from: spell(tonic, mode, iv, d), to: spell(tonic, mode, target, d) });
-    return { ...n, midi: n.midi + delta, edited: true };
-  });
-  return { notes: out, changes: [...seen.values()] };
 }

@@ -147,6 +147,16 @@
     </div>
 
     <div class="scroll-x"><div class="blocks" id="blocks"></div></div>
+    <div class="journey" id="journey">
+      <div class="journey-head">
+        <span class="label">Mood for each part</span>
+        <button type="button" class="tool" id="journey-again">Try another version</button>
+      </div>
+      <div class="presets" id="presets" role="group" aria-label="Mood journeys"></div>
+      <div class="scroll-x"><div class="strip" id="strip"></div></div>
+      <div class="strip-pick" id="strip-pick" hidden></div>
+      <p class="hint">Tap a part to change its mood. Press and hold a part to use its mood from there to the end. Only the chords change: your notes stay exactly as they are.</p>
+    </div>
     <div class="controls">
       <button type="button" class="primary" id="play-notes">Play notes</button>
       <button type="button" id="play-chords">Play with chords</button>
@@ -185,16 +195,17 @@
   <section class="panel" aria-labelledby="chords-h">
     <div class="panel-head">
       <h2 id="chords-h">Chords that fit</h2>
-      <span class="label" id="key-label"></span>
+      <label class="home-pick"><span class="label">Home note</span><select id="home-key" aria-label="Home note (key)"></select></label>
     </div>
 
     <div class="label">Pick a mood</div>
-    <p class="hint">Your melody can go in more than one direction. Each mood keeps the same home note but changes the chords underneath.</p>
-    <div class="scroll-x"><div class="modes" id="modes"></div></div>
+    <p class="hint">Hear the same tune feel different. Your notes stay exactly as you hummed them: a mood only changes the chords underneath.</p>
+    <div class="scroll-x"><div class="moods" id="moods"></div></div>
 
     <p class="hint">Tap any chord to hear it. It also lights up on the keyboard.</p>
     <div class="label" id="prog-label">For each phrase, in order</div>
     <div class="chords" id="progression"></div>
+    <p class="why" id="chord-why" aria-live="polite"></p>
     <div class="label" id="note-chords-label">Chords for one note</div>
     <div class="chords" id="note-chords"></div>
     <div class="label" id="palette-label">Other chords in this key</div>
