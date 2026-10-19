@@ -97,6 +97,25 @@ export function diatonicChords(key) {
 }
 
 /**
+ * Split a melody into slots of about `notesPerChord` notes, one chord each,
+ * starting a new slot early at a long pause. `phraseEnd` marks a slot that is
+ * followed by a pause (or is the last one): where a phrase comes to rest.
+ * @returns {Array<{first:number, count:number, phraseEnd:boolean}>}
+ */
+export function phraseSlots(notes, { notesPerChord = 4, pause = 0.45 } = {}) {
+  const slots = [];
+  notes.forEach((n, i) => {
+    const gap = i ? n.start - notes[i - 1].end : 0;
+    const cur = slots[slots.length - 1];
+    if (cur && cur.count < notesPerChord && gap <= pause) { cur.count++; return; }
+    if (cur) cur.phraseEnd = gap > pause;
+    slots.push({ first: i, count: 1, phraseEnd: false });
+  });
+  if (slots.length) slots[slots.length - 1].phraseEnd = true;
+  return slots;
+}
+
+/**
  * Suggest chords for a melody: split it into phrases of ~`notesPerChord` notes
  * (or by long pauses) and pick, for each, the diatonic chord whose tones cover
  * the most melody time. Also returns the overall best-fitting chords.
@@ -119,16 +138,7 @@ export function suggestChords(notes, key, { notesPerChord = 4, chords: chordSet 
     return total ? (covered / total) * 0.8 + chord.weight * 0.2 : 0;
   };
 
-  // Group notes into phrases.
-  const groups = [];
-  let g = [];
-  notes.forEach((n, i) => {
-    const prev = notes[i - 1];
-    const pause = prev ? n.start - prev.end : 0;
-    if (g.length && (g.length >= notesPerChord || pause > 0.45)) { groups.push(g); g = []; }
-    g.push(n);
-  });
-  if (g.length) groups.push(g);
+  const groups = phraseSlots(notes, { notesPerChord }).map((s) => notes.slice(s.first, s.first + s.count));
 
   const progression = groups.map((grp, i) => {
     let ranked = chords.map((c) => ({ chord: c, score: fit(c, grp, i === groups.length - 1) })).sort((a, b) => b.score - a.score);

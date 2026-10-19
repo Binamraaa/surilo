@@ -63,7 +63,7 @@ const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
 const FLAT_TONICS = new Set([5, 10, 3, 8, 1, 6]); // F Bb Eb Ab Db Gb
 
 // Which scale degree each semitone above home belongs to (1 = ♭2 → 2nd degree, 6 = ♯4 → 4th…).
-const DEGREE_OF = [0, 1, 1, 2, 2, 3, 3, 4, 5, 5, 6, 6];
+export const DEGREE_OF = [0, 1, 1, 2, 2, 3, 3, 4, 5, 5, 6, 6];
 const LETTERS = 'CDEFGAB';
 const NATURAL = [0, 2, 4, 5, 7, 9, 11];
 const ACC = { '-2': '𝄫', '-1': '♭', 0: '', 1: '♯', 2: '𝄪' };
