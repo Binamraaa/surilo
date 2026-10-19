@@ -3,7 +3,7 @@
 Surilo (formerly Hum to Notes; the repo still uses hum-to-notes) is live at https://surilo.vercel.app. It is a browser app: hum a melody, then see the notes as blocks, on a guitar fretboard, a piano and a staff, with a key guess and chord suggestions. It's a public GitHub portfolio project. It's meant for quick experimenting, not studio-grade transcription.
 
 ## Product
-- Free for everyone, open source (MIT), no ads, no account. The only money is an optional tip that unlocks nothing: `TIP_URL` at the top of app.js (empty = no tip button), and later an in-app purchase in the store builds.
+- Free for everyone, open source (MIT), no ads, no account. The only money is an optional tip that unlocks nothing: **♥ Leave a tip** in About Surilo shows the maker's eSewa QR (`assets/tip-esewa.png`, cropped so the phone number isn't printed); store builds will need an in-app purchase instead (app-store payment rules).
 - Positioning: nothing is generated. Never add features that write music for the user; the app helps them find their own notes and chords.
 - The name Surilo and the logo aren't covered by the MIT licence (TRADEMARK.md).
 - Saved settings and the test-hum format keep their old `hum-to-notes.*` / `hum-to-notes-test` names on purpose: renaming them would wipe users' settings and orphan the saved test hums.

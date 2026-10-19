@@ -118,10 +118,11 @@ details.help[open] summary::before { transform: rotate(90deg); }
 .toolbox .chords + .label { margin-top: 16px; }
 
 /* About Surilo: the promise, and an optional tip. */
-.about-row { display: flex; flex-wrap: wrap; gap: 10px; }
-.about-row a { text-decoration: none; min-height: 44px; justify-content: center; }
-.about-row a[hidden] { display: none; }
-.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.tip-btn { justify-self: start; min-height: 44px; }
+.tip-box { display: grid; justify-items: center; gap: 8px; }
+.tip-box[hidden] { display: none; }
+.tip-box img { width: min(240px, 70vw); height: auto; border-radius: 12px; }
+.tip-box .hint { text-align: center; max-width: 32ch; }
 
 /* Setting the tempo of an upload or sample. */
 .tempo-row { display: flex; gap: 8px; }

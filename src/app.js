@@ -23,9 +23,6 @@ import { harmonise, paletteFor, barSlots } from './core/harmony.js';
 import { MOODS, moodById, JOURNEYS, journeyById, journeyFor } from './core/moods.js';
 
 const $ = (id) => document.getElementById(id);
-// Surilo is free; a tip is optional and unlocks nothing. Put the tip page here (GitHub Sponsors,
-// Ko-fi…) and the "Leave a tip" button appears in About Surilo. Empty: no button.
-const TIP_URL = '';
 const inArtifact = typeof window.claude === 'object' && window.claude !== null;
 
 // How far the tune's key may overrule this singer's pitch when picking the note they
@@ -1054,7 +1051,13 @@ function applyEdit(edit) {
 
 function init() {
   initTheme();
-  if (TIP_URL) { $('tip').href = TIP_URL; $('tip').hidden = false; }
+  // Surilo is free; a tip is optional and unlocks nothing. The button shows the eSewa QR.
+  $('tip').addEventListener('click', () => {
+    const box = $('tip-box');
+    box.hidden = !box.hidden;
+    $('tip').setAttribute('aria-expanded', String(!box.hidden));
+    if (!box.hidden) box.scrollIntoView({ block: 'nearest' });
+  });
   metro = createMetronomePanel({ getCtx });
   recSetup = createRecordSetup({ metro, say: setStatus });
   if (testModeOn()) $('test-kit').hidden = false;

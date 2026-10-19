@@ -131,8 +131,10 @@
       <h2 id="about-h">About Surilo</h2>
       <p class="hint"><b>Surilo</b> (सुरिलो) is Nepali for <i>tuneful</i>. Hum the tune in your head, and Surilo helps you find its notes, its chords and where to play it. Nothing is generated: every note is one you hummed.</p>
       <p class="hint">Free for everyone, always. No ads, no account, and your voice never leaves your device.</p>
-      <div class="about-row">
-        <a class="btn primary" id="tip" href="" target="_blank" rel="noopener" hidden>♥ Leave a tip</a>
+      <button type="button" class="primary tip-btn" id="tip" aria-expanded="false" aria-controls="tip-box">♥ Leave a tip</button>
+      <div class="tip-box" id="tip-box" hidden>
+        <img src="assets/tip-esewa.png" width="240" height="305" alt="eSewa QR code for tipping Binamra Bhusal, the maker of Surilo" loading="lazy">
+        <p class="hint">Scan with eSewa. Any amount helps keep Surilo free; a tip unlocks nothing, and you never have to.</p>
       </div>
     </section>
   </section>
