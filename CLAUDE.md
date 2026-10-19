@@ -41,7 +41,7 @@ A browser app: hum a melody, then see the notes as blocks, on a guitar fretboard
 
 ## Conventions
 - Pitch is a float MIDI number throughout (69 = A4, middle C = C4 = 60). Notes are `{midi, pitch, cents, start, end}`, with times in seconds.
-- All colours come from CSS custom properties in `styles.css`, in light and dark sets. Use `style="fill:var(--x)"` in SVG, never hard-coded colours.
+- All colours come from CSS custom properties in `styles.css`, in light and dark sets. The light set is bright and cool; the dark set is the original. The top-bar button cycles Auto → Light → Dark (`data-theme` on `<html>`, saved as `hum-to-notes.theme`; a one-line script in `<head>` applies it before first paint). Canvas code reads colours when it draws, so redraw it after a theme change. Use `style="fill:var(--x)"` in SVG, never hard-coded colours.
 - Copy is written for beginners: plain words, no jargon without explanation.
 
 ## Accuracy baseline

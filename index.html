@@ -5,13 +5,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Hum to Notes</title>
 <meta name="description" content="Hum a melody and see the notes, where to play them on guitar and piano, the likely key, and chords that fit.">
-<meta name="theme-color" content="#2448c4">
+<meta name="theme-color" content="#2f5be0">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=JetBrains+Mono:wght@400;600&family=Noto+Music&display=swap">
 <link rel="stylesheet" href="styles.css">
+<script>try { const t = localStorage.getItem('hum-to-notes.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}</script>
 </head>
 <body>
 <!--APP-->
@@ -34,6 +35,7 @@
       </button>
     </nav>
     <button type="button" class="context" id="context" hidden aria-label="Key and mood: open Chords"></button>
+    <button type="button" class="theme" id="theme" aria-label="Colours"></button>
   </div>
 </header>
 
@@ -112,9 +114,9 @@
       <div class="panel-head">
         <h2 id="notes-h">Your notes</h2>
         <div class="seg" role="group" aria-label="Octave">
-          <button type="button" data-oct="-1" aria-pressed="false">8va ↓</button>
+          <button type="button" data-oct="-1" aria-pressed="false" title="Show everything an octave lower">Octave −</button>
           <button type="button" data-oct="0" aria-pressed="true">As hummed</button>
-          <button type="button" data-oct="1" aria-pressed="false">8va ↑</button>
+          <button type="button" data-oct="1" aria-pressed="false" title="Show everything an octave higher">Octave +</button>
         </div>
       </div>
       <div class="facts" id="facts"></div>
@@ -248,10 +250,10 @@
     </section>
     <section class="panel" aria-labelledby="save-h">
       <div class="panel-head">
-        <h2 id="save-h">Take it to your DAW</h2>
+        <h2 id="save-h">Save it</h2>
         <button type="button" id="midi">Save MIDI</button>
       </div>
-      <p class="hint">A MIDI file with the melody and your chords. Drag it into Reaper or any DAW.</p>
+      <p class="hint">A MIDI file with your melody and chords. It opens in GarageBand, Reaper, Logic, FL Studio or any other music software.</p>
     </section>
   </section>
 </main>

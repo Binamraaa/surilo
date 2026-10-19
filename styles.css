@@ -1,24 +1,24 @@
 /* Layout: four sections (Hum, Notes, Chords, Play) under a top bar, with a playback bar always in reach.
    On phones the section tabs sit at the bottom of the screen, like an app. */
 :root {
-  --paper: #f1f3ee;      /* faint sage practice paper */
-  --sheet: #fbfcf9;      /* raised panels */
-  --ink: #1d2626;
-  --ink-soft: #55615f;
-  --rule: #d5dbd3;
-  --accent: #2448c4;     /* cobalt: live pitch, active note */
+  --paper: #f3f6fb;      /* bright, cool page */
+  --sheet: #ffffff;      /* raised panels */
+  --ink: #161c2d;
+  --ink-soft: #586377;
+  --rule: #dde3ee;
+  --accent: #2f5be0;     /* cobalt: live pitch, active note, actions */
   --accent-ink: #ffffff;
-  --accent-wash: #e3e9fb;
-  --warm: #b8741a;       /* sharp/flat needle, chords */
-  --warm-wash: #f6ead6;
-  --good: #2f7d4f;
+  --accent-wash: #e7edff;
+  --warm: #c25400;       /* chords, the sharp/flat needle */
+  --warm-wash: #fff0dc;
+  --good: #18864b;
   --wood: #5a3b28;       /* rosewood fretboard */
   --wood-2: #6b4630;
   --fret: #c9c2b4;
   --string: #e7dfcf;
   --inlay: #efe9dc;
   --key-white: #ffffff;
-  --key-black: #1d2626;
+  --key-black: #161c2d;
   --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
   --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -27,8 +27,8 @@
   --rec: #c62f2f;        /* recording */
   --appbar-h: 56px; --tabbar-h: 62px; --player-h: 62px;
   /* One wash per mood, for the mood strip. */
-  --m-bright: #f5e6b8; --m-bittersweet: #efd9e3; --m-dark: #d6dbe8; --m-hopeful: #d8ead9; --m-bluesy: #d3e2f2;
-  --m-dreamy: #e4dcf3; --m-epic: #efd5ca; --m-jazzy: #e8e0cc; --m-floating: #d5ecea;
+  --m-bright: #ffe8a3; --m-bittersweet: #fcd9e8; --m-dark: #d8def2; --m-hopeful: #d0f0da; --m-bluesy: #cfe5fc;
+  --m-dreamy: #e6dafc; --m-epic: #fdd6c8; --m-jazzy: #f3e5c2; --m-floating: #c9eeea;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -71,6 +71,12 @@ body {
   font: 700 13px/1.1 var(--font-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 52vw; display: inline-block;
 }
 .context[hidden] { display: none; }
+/* Colours: match the device, light or dark. */
+.theme { flex: none; width: 40px; height: 40px; padding: 0; justify-content: center; border-color: transparent; background: transparent; color: var(--ink-soft); }
+.theme svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.theme .fill { fill: currentColor; stroke: none; }
+.context:not([hidden]) + .theme { margin-left: 0; }
+.context[hidden] + .theme { margin-left: auto; }
 .tabs { display: flex; gap: 2px; }
 .tabs button { border: 0; background: transparent; border-radius: 10px; color: var(--ink-soft); font: 600 14px/1 var(--font-body); padding: 9px 12px; gap: 7px; }
 .tabs svg { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -117,6 +123,8 @@ button.rec.big { min-height: 58px; font-size: 17px; justify-content: center; jus
 @media (max-width: 720px) {
   .appbar-in { padding: 0 12px; }
   .appbar h1 { font-size: 19px; }
+  .appbar-in { gap: 8px; }
+  .context { max-width: 46vw; }
   .tabs {
     position: fixed; z-index: 21; left: 0; right: 0; bottom: 0; gap: 0; justify-content: space-around;
     background: var(--sheet); border-top: 1px solid var(--rule); padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px));

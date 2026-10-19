@@ -4,7 +4,7 @@
   "description": "Hum a melody and see the notes, guitar frets, piano keys and chords that fit.",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#f1f3ee",
-  "theme_color": "#2448c4",
+  "background_color": "#f3f6fb",
+  "theme_color": "#2f5be0",
   "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
 }

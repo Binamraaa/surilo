@@ -502,6 +502,43 @@ function setStatus(msg, warn = false) {
   if (msg && !warn && !state.mic) toastTimer = setTimeout(() => { s.hidden = true; }, 4000 + msg.length * 30);
 }
 
+// ---------- Colours (light, dark or the device's choice) ----------
+
+const THEME_KEY = 'hum-to-notes.theme';
+const THEME_ICONS = {
+  auto: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path class="fill" d="M12 4a8 8 0 0 1 0 16z"/></svg>',
+  light: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  dark: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
+};
+const THEME_NAMES = { auto: 'match my device', light: 'light', dark: 'dark' };
+
+function applyTheme(theme) {
+  if (theme === 'auto') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = theme;
+  $('theme').innerHTML = THEME_ICONS[theme];
+  $('theme').setAttribute('aria-label', `Colours: ${THEME_NAMES[theme]}. Tap to change.`);
+  $('theme').title = `Colours: ${THEME_NAMES[theme]}`;
+  // The phone's status bar follows the top bar's colour.
+  const bar = getComputedStyle(document.documentElement).getPropertyValue('--sheet').trim();
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', bar || '#ffffff');
+  renderTrace(); // the trace reads its colours when it draws
+}
+
+function initTheme() {
+  let theme = 'auto';
+  try { theme = localStorage.getItem(THEME_KEY) || 'auto'; } catch { /* private mode */ }
+  if (!THEME_ICONS[theme]) theme = 'auto';
+  applyTheme(theme);
+  $('theme').addEventListener('click', () => {
+    theme = { auto: 'light', light: 'dark', dark: 'auto' }[theme];
+    try { localStorage.setItem(THEME_KEY, theme); } catch { /* just for this visit */ }
+    applyTheme(theme);
+    setStatus(`Colours: ${THEME_NAMES[theme]}.`);
+  });
+  // Following the device: redraw when it switches between light and dark.
+  matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => theme === 'auto' && applyTheme('auto'));
+}
+
 // ---------- Sections (tabs) ----------
 
 const VIEWS = ['hum', 'notes', 'chords', 'play'];
@@ -766,6 +803,7 @@ function applyEdit(edit) {
 // ---------- Wiring ----------
 
 function init() {
+  initTheme();
   metro = createMetronomePanel({ getCtx });
   if (testModeOn()) $('test-kit').hidden = false;
   $('test-save').addEventListener('click', saveTestHum);
