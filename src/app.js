@@ -10,7 +10,7 @@ import {
   withIds, transpose, reshape, deleteNote, addNote, splitNote, mergeWithNext, resolveGuess, indexOfId, createHistory,
 } from './core/edit.js';
 import { startMic, decodeFile } from './audio/mic.js';
-import { playNotes, playOnce, playRecording, playSequence, stopPlayback, getCtx } from './audio/synth.js';
+import { playNotes, playOnce, playRecording, stopPlayback, getCtx } from './audio/synth.js';
 import { blocksView, fretboardView, pianoView, staffView, drawTrace } from './ui/views.js';
 import { createRoll } from './ui/roll.js';
 import { createMetronomePanel } from './ui/metronome-panel.js';
@@ -58,6 +58,7 @@ const state = {
   stripSel: null,    // the part selected on the mood strip
   versions: {},      // which variation ("Try another version") each mood, or 'journey', is showing
   playingProg: null, // the chords being played, so the keyboard can follow them
+  playing: null,     // which playback button is playing: 'notes', 'chords', 'hum' (or 'card')
   // derived
   notes: [], key: null, keys: [], home: null, flats: false, fingering: [],
   slots: [], journey: [], mood: null, variants: [], progression: [], palette: [], chordsAt: new Map(),
@@ -194,7 +195,7 @@ function renderTestKit() {
 
 function renderFacts() {
   const el = $('facts');
-  if (!state.notes.length) { el.innerHTML = ''; return; }
+  if (!state.notes.length) { el.innerHTML = ''; $('context').hidden = true; return; }
   const [k1, k2] = state.keys;
   const close = k2 && k1.score - k2.score < 0.08;
   const mids = state.notes.map((n) => n.midi);
@@ -202,13 +203,13 @@ function renderFacts() {
   const tune = Math.round(state.tuning * 100);
   const fact = (label, v, small = '') => `<div class="fact"><span class="label">${label}</span><span class="v">${v}${small ? `<small>${small}</small>` : ''}</span></div>`;
   const preset = journeyById(state.journeyId);
+  const moodName = state.strip ? 'Your mix' : preset?.moods ? preset.name : state.mood.name;
+  $('context').hidden = !state.home;
+  if (state.home) $('context').textContent = `${keyName(state.home)} · ${moodName}`;
   el.innerHTML = [
     state.homeKey
       ? fact('Home key', keyName(state.homeKey), 'picked by you')
       : fact('Likely key', k1.name, close ? `or ${k2.name}` : ''),
-    state.strip ? fact('Mood', 'Your own mix')
-      : preset?.moods ? fact('Mood', preset.name)
-      : fact('Mood', state.mood.name, state.moodId ? 'picked by you' : ''),
     fact('Notes', state.notes.length),
     fact('Range', `${midiToName(lo, { flats: state.flats })}–${midiToName(hi, { flats: state.flats })}`),
     fact('Your tuning', Math.abs(tune) < 8 ? 'Spot on' : `${Math.abs(tune)}¢ ${tune > 0 ? 'sharp' : 'flat'}`, Math.abs(tune) >= 8 ? 'corrected for you' : ''),
@@ -251,7 +252,7 @@ function renderChords() {
   $('chord-why').textContent = state.progression.length ? 'Tap a chord to hear it and see why it fits.' : '';
   $('palette').innerHTML = state.palette.map((c, i) => chip(c, c.numeral, i, 'pal')).join('');
   const focus = moodById(state.stripSel != null ? state.journey[state.stripSel] : state.journey[0]) || state.mood;
-  $('prog-label').textContent = `For each part, in order · ${steady() ? state.mood.name : journeyById(state.journeyId)?.name || 'your own mix'}`;
+  $('prog-label').textContent = steady() ? state.mood.name : journeyById(state.journeyId)?.name || 'Your own mix';
   $('palette-label').textContent = `All chords in ${focus.name}`;
   renderHomePicker();
   renderMoods();
@@ -290,16 +291,16 @@ function renderMoods() {
     const prog = vs[k] || [];
     state.cards[m.id] = prog;
     const on = part != null ? state.journey[part] === m.id : steady() && state.mood.id === m.id;
-    const use = on ? '<button type="button" disabled>Using this</button>'
-      : `<button type="button" class="primary" data-act="use" data-id="${m.id}">${part != null ? `Use for part ${part + 1}` : 'Use this mood'}</button>`;
+    const use = on ? '<button type="button" disabled>✓ In use</button>'
+      : `<button type="button" class="primary" data-act="use" data-id="${m.id}">${part != null ? `Use for part ${part + 1}` : 'Use'}</button>`;
     return `<article class="mood${on ? ' on' : ''}" aria-current="${on}">
       <h3>${m.name}<small>${m.theory}</small></h3>
       <p>${m.feel}</p>
       <div class="prog">${progChips(prog)}</div>
       <div class="row">
-        <button type="button" data-act="hear" data-id="${m.id}">▶ Hear it</button>
+        <button type="button" data-act="hear" data-id="${m.id}">▶ Hear</button>
         ${use}
-        ${vs.length > 1 ? `<button type="button" data-act="again" data-id="${m.id}">Try another version <span class="ver">${k + 1}/${vs.length}</span></button>` : ''}
+        ${vs.length > 1 ? `<button type="button" data-act="again" data-id="${m.id}" title="Try another version" aria-label="Try another version (now ${k + 1} of ${vs.length})">↻ <span class="ver">${k + 1}/${vs.length}</span></button>` : ''}
       </div>
     </article>`;
   }).join('');
@@ -311,7 +312,7 @@ function onMoodAction(e) {
   const mood = moodById(btn.dataset.id);
   if (!mood) return;
   if (btn.dataset.act === 'hear') {
-    playMelody(state.cards[mood.id]);
+    playMelody(state.cards[mood.id], 'card');
     setStatus(`Playing your melody in ${mood.name}. The notes are the same: only the chords changed.`);
   } else if (btn.dataset.act === 'use') {
     if (state.stripSel != null) {
@@ -319,7 +320,7 @@ function onMoodAction(e) {
     } else {
       Object.assign(state, { moodId: mood.id, journeyId: 'steady', strip: null });
       derive(); renderAll();
-      setStatus(`Chords now follow ${mood.name}. Your notes haven't changed. Press "Play with chords" to hear it.`);
+      setStatus(`Chords now follow ${mood.name}. Your notes haven't changed. Tap ▶ With chords to hear it.`);
     }
   } else if (btn.dataset.act === 'again') {
     state.versions[mood.id] = (state.versions[mood.id] || 0) + 1;
@@ -377,7 +378,7 @@ function initStrip() {
     state.versions.journey = 0;
     derive(); renderAll();
     const j = journeyById(state.journeyId);
-    setStatus(j.moods ? `${j.name}: ${j.about} Press "Play with chords" to hear it.` : `One mood all the way through: ${state.mood.name}.`);
+    setStatus(j.moods ? `${j.name}: ${j.about} Tap ▶ With chords to hear it.` : `One mood all the way through: ${state.mood.name}.`);
   });
   $('journey-again').addEventListener('click', () => {
     const k = versionKey();
@@ -489,10 +490,45 @@ function showInputLevel(level) {
   bar.style.width = `${Math.max(0, Math.min(100, ((db + 60) / 60) * 100))}%`;
 }
 
+let toastTimer = 0;
+/** Show a message as a toast over whichever section is open. Warnings, and messages while
+ * listening, stay until tapped or replaced; the rest fade after a few seconds. */
 function setStatus(msg, warn = false) {
   const s = $('status');
   s.textContent = msg;
   s.classList.toggle('warn', warn);
+  s.hidden = !msg;
+  clearTimeout(toastTimer);
+  if (msg && !warn && !state.mic) toastTimer = setTimeout(() => { s.hidden = true; }, 4000 + msg.length * 30);
+}
+
+// ---------- Sections (tabs) ----------
+
+const VIEWS = ['hum', 'notes', 'chords', 'play'];
+let view = 'hum';
+
+function showView(name) {
+  view = name;
+  document.querySelectorAll('#tabs [data-view]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.view === name)));
+  for (const v of VIEWS) $(`view-${v}`).hidden = v !== name;
+  window.scrollTo(0, 0);
+  // The trace and the roll measure their own width, so draw them once they're on screen.
+  if (name === 'hum') renderTrace();
+  if (name === 'notes') renderRoll();
+  if (name === 'chords') $('moods').querySelector('.mood.on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+}
+
+// ---------- Playback bar ----------
+
+const PLAY_LABELS = { notes: '▶ Notes', chords: '▶ With chords', hum: '▶ My hum' };
+/** Light up the button that's playing (it becomes Stop); null when nothing plays. */
+function setPlaying(kind) {
+  state.playing = kind;
+  document.querySelectorAll('#player [data-play]').forEach((b) => {
+    const on = b.dataset.play === kind;
+    b.classList.toggle('playing', on);
+    b.textContent = on ? '■ Stop' : PLAY_LABELS[b.dataset.play];
+  });
 }
 
 // ---------- Actions ----------
@@ -557,8 +593,8 @@ function stopRecording() {
   analyseRecording(rec, 'your hum');
 }
 
-function analyseRecording(rec, label) {
-  setStatus('Finding the notes…');
+function analyseRecording(rec, label, { quiet = false } = {}) {
+  if (!quiet) setStatus('Finding the notes…');
   // Let the status paint before the (sub-second) analysis blocks the thread.
   setTimeout(() => {
     const frames = analyseBuffer(rec.samples, rec.sampleRate);
@@ -566,6 +602,8 @@ function analyseRecording(rec, label) {
     const n = state.notes.length;
     const guesses = state.notes.filter((x) => x.adjusted).length;
     if (n) {
+      if (quiet) return;
+      showView('notes');
       setStatus(`Found ${n} note${n === 1 ? '' : 's'} in ${label}.${guesses ? ` ${guesses === 1 ? 'One was' : `${guesses} were`} between two notes, so I picked the one that fits the tune (dashed, marked ≈). Tap it to check.` : ''}`);
       return;
     }
@@ -605,13 +643,13 @@ async function onFile(e) {
   e.target.value = '';
 }
 
-function loadSample(name) {
+function loadSample(name, { quiet = false } = {}) {
   if (!DEMO_MELODIES[name]) return;
   stopPlayback();
   const rec = synthHum(DEMO_MELODIES[name]);
   $('mode-label').textContent = `Sample · ${name}`;
   Object.assign(state, { source: 'sample', micLabel: null, recTempo: null });
-  analyseRecording(rec, `the "${name}" sample`);
+  analyseRecording(rec, `the "${name}" sample`, { quiet });
 }
 
 const tick = (i, t) => {
@@ -629,9 +667,11 @@ const tick = (i, t) => {
 };
 
 /** Play the notes, with a progression underneath (or none). */
-function playMelody(progression = null) {
+function playMelody(progression = null, kind = progression ? 'chords' : 'notes') {
+  // Starting stops whatever was playing, and that resets the bar, so mark the new one after.
+  playNotes(state.notes, { timbre: state.instrument, progression, onTick: tick, onEnd: () => setPlaying(null) });
   state.playingProg = progression;
-  playNotes(state.notes, { timbre: state.instrument, progression, onTick: tick });
+  setPlaying(kind);
 }
 
 async function saveMidi() {
@@ -784,9 +824,20 @@ function init() {
   sel.addEventListener('change', () => loadSample(sel.value));
   $('rec').addEventListener('click', toggleRecording);
   $('file').addEventListener('change', onFile);
-  $('play-notes').addEventListener('click', () => playMelody());
-  $('play-chords').addEventListener('click', () => playMelody(state.progression));
-  $('play-hum').addEventListener('click', () => state.recording && playRecording(state.recording, { onTick: tick }));
+  // Each playback button starts its sound, or stops it if it's the one playing.
+  const playButton = (kind, start) => $(`play-${kind}`).addEventListener('click', () => (state.playing === kind ? stopPlayback() : start()));
+  playButton('notes', () => playMelody());
+  playButton('chords', () => playMelody(state.progression));
+  playButton('hum', () => {
+    if (!state.recording) return;
+    playRecording(state.recording, { onTick: tick, onEnd: () => setPlaying(null) });
+    setPlaying('hum');
+  });
+  $('tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (b) showView(b.dataset.view); });
+  $('context').addEventListener('click', () => showView('chords'));
+  $('status').addEventListener('click', () => { $('status').hidden = true; });
+  // The metronome's floating pill takes you back to the metronome, on the Hum section.
+  $('metro-mini-show').addEventListener('click', () => { showView('hum'); $('metro').scrollIntoView({ block: 'start' }); });
   $('midi').addEventListener('click', saveMidi);
   // Downloads started by the page are blocked inside a Claude artifact; MIDI export is for the hosted version.
   if (inArtifact) $('midi').hidden = true;
@@ -831,7 +882,7 @@ function init() {
   $('note-chords').addEventListener('click', onChord);
 
   window.addEventListener('resize', () => { renderTrace(); renderRoll(); });
-  loadSample('Ode to Joy');
+  loadSample('Ode to Joy', { quiet: true });
   sel.value = 'Ode to Joy';
 }
 

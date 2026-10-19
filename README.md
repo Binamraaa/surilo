@@ -10,6 +10,7 @@ Made for beginner and intermediate players who can hum a tune but can't yet find
 
 ## What it does
 
+- **Built for phones.** Four sections, Hum, Notes, Chords and Play, with tabs at the bottom of the screen like an app, and a playback bar (notes, notes with chords, or your own hum) that stays in reach on every section. The top bar shows the key and mood; tap it to change the chords.
 - **Metronome.** Set the tempo with big − / + buttons (hold to keep going), a slider, or by tapping the beat. Choose 4/4, 3/4 or 6/8. Beat 1 is louder, and a row of dots shows where you are in the bar, so you can turn the sound off and follow the dots. It keeps your screen awake while it runs, and a small bar stays at the top of the screen when you scroll down to practise the melody.
 - **Live tuner.** Shows the note you're humming right now, plus a needle for how sharp or flat you are.
 - **Note blocks.** Cleans up your hum and turns it into a row of notes. It smooths out vibrato and scoops, ignores breaths, and keeps repeated notes ("da-da") separate.

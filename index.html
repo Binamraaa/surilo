@@ -15,154 +15,165 @@
 </head>
 <body>
 <!--APP-->
-<main class="wrap">
-  <header class="top">
+<header class="appbar">
+  <div class="appbar-in">
     <h1>Hum to <span>Notes</span></h1>
-    <p>Hum a tune you know by ear. See the notes, where to play them, and chords that fit.</p>
-  </header>
-
-  <section class="panel metro" id="metro" aria-labelledby="metro-h">
-    <div class="metro-head">
-      <h2 id="metro-h">Metronome</h2>
-      <button type="button" class="metro-sum" id="metro-toggle" aria-expanded="true" aria-controls="metro-body"><span id="metro-sum">90 BPM · 4/4</span><span class="chev" aria-hidden="true"></span></button>
-    </div>
-    <div class="metro-pulse">
-      <div class="beat-dots" id="metro-dots" aria-hidden="true"></div>
-      <button type="button" class="primary metro-go" id="metro-go" aria-pressed="false">Start</button>
-    </div>
-    <div class="metro-body" id="metro-body">
-      <div class="bpm-row">
-        <button type="button" class="step" id="bpm-down" aria-label="Slower">−</button>
-        <div class="bpm"><output id="bpm-val" for="bpm-slider">90</output><span class="label" id="bpm-unit">beats per minute</span></div>
-        <button type="button" class="step" id="bpm-up" aria-label="Faster">+</button>
-      </div>
-      <input type="range" id="bpm-slider" min="40" max="240" step="1" value="90" aria-label="Tempo in beats per minute">
-      <div class="metro-row">
-        <button type="button" class="tap" id="tap">Tap the beat</button>
-        <div class="seg big" role="group" aria-label="Beats in a bar">
-          <button type="button" data-sig="4/4" aria-pressed="true">4/4</button>
-          <button type="button" data-sig="3/4" aria-pressed="false">3/4</button>
-          <button type="button" data-sig="6/8" aria-pressed="false">6/8</button>
-        </div>
-      </div>
-      <div class="metro-row">
-        <button type="button" class="toggle" id="metro-sound" aria-pressed="true">Sound</button>
-        <button type="button" class="toggle" id="metro-accent" aria-pressed="true">Louder beat 1</button>
-      </div>
-      <p class="hint" id="metro-hint"></p>
-    </div>
-  </section>
-  <div class="metro-mini" id="metro-mini" hidden>
-    <button type="button" class="metro-mini-bpm" id="metro-mini-show" aria-label="Show the metronome"><b id="metro-mini-bpm">90</b> BPM</button>
-    <div class="beat-dots small" id="metro-mini-dots" aria-hidden="true"></div>
-    <button type="button" class="metro-mini-stop" id="metro-mini-stop">Stop</button>
+    <!-- Four sections. A tab bar at the bottom on phones, in this bar on wider screens. -->
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Sections">
+      <button type="button" role="tab" id="tab-hum" data-view="hum" aria-selected="true" aria-controls="view-hum">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span>Hum</span>
+      </button>
+      <button type="button" role="tab" id="tab-notes" data-view="notes" aria-selected="false" aria-controls="view-notes">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg><span>Notes</span>
+      </button>
+      <button type="button" role="tab" id="tab-chords" data-view="chords" aria-selected="false" aria-controls="view-chords">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="17" r="2.6"/><circle cx="12" cy="11.5" r="2.6"/><circle cx="17" cy="6" r="2.6"/><path d="M4 21h16"/></svg><span>Chords</span>
+      </button>
+      <button type="button" role="tab" id="tab-play" data-view="play" aria-selected="false" aria-controls="view-play">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 5v8M12 5v8M16 5v8"/></svg><span>Play</span>
+      </button>
+    </nav>
+    <button type="button" class="context" id="context" hidden aria-label="Key and mood: open Chords"></button>
   </div>
+</header>
 
-  <section class="panel" aria-labelledby="capture-h">
-    <div class="panel-head">
-      <h2 id="capture-h">Listen</h2>
-      <span class="label" id="mode-label">Sample loaded</span>
-    </div>
-    <div class="tuner">
-      <div class="live-note idle" id="live">
-        <div class="name" id="live-name">–</div>
-        <div class="hz" id="live-hz">hum steadily on "mmm"</div>
-        <div class="live-chords" id="live-chords" aria-live="off"></div>
-        <div class="meter" aria-hidden="true">
-          <div class="scale"></div>
-          <div class="tick" style="left:0"></div><div class="tick" style="left:25%"></div>
-          <div class="tick zero" style="left:50%"></div>
-          <div class="tick" style="left:75%"></div><div class="tick" style="left:100%"></div>
-          <div class="needle" id="needle" style="left:50%"></div>
-          <div class="cents" id="cents">flat · in tune · sharp</div>
-        </div>
-        <div class="input-meter" title="Microphone input level"><span class="label">Mic</span><div class="bar"><div id="input-level"></div></div></div>
+<main class="wrap">
+
+  <!-- ===== Hum: record, upload or try a sample ===== -->
+  <section class="view" id="view-hum" role="tabpanel" aria-labelledby="tab-hum">
+    <section class="panel" aria-labelledby="capture-h">
+      <div class="panel-head">
+        <h2 id="capture-h">Hum a tune</h2>
+        <span class="label" id="mode-label">Sample loaded</span>
       </div>
-      <div class="trace-box"><canvas class="trace" id="trace" aria-label="Pitch over time"></canvas></div>
-    </div>
-    <div class="controls">
-      <button class="rec primary" id="rec" type="button"><span class="dot"></span><span id="rec-label">Start humming</span></button>
-      <label class="btn" for="file">Upload a recording<input type="file" id="file" accept="audio/*,.m4a,.wav,.mp3,.ogg,.webm,.aac"></label>
-      <select id="sample" aria-label="Try a sample hum">
-        <option value="">Try a sample hum…</option>
-      </select>
-    </div>
-    <p class="status" id="status" role="status"></p>
+      <button class="rec primary big" id="rec" type="button"><span class="dot"></span><span id="rec-label">Start humming</span></button>
+      <div class="or-row">
+        <label class="btn" for="file">Upload a recording<input type="file" id="file" accept="audio/*,.m4a,.wav,.mp3,.ogg,.webm,.aac"></label>
+        <select id="sample" aria-label="Try a sample hum">
+          <option value="">Try a sample…</option>
+        </select>
+      </div>
+      <div class="tuner">
+        <div class="live-note idle" id="live">
+          <div class="name" id="live-name">–</div>
+          <div class="hz" id="live-hz">hum steadily on "mmm"</div>
+          <div class="live-chords" id="live-chords" aria-live="off"></div>
+          <div class="meter" aria-hidden="true">
+            <div class="scale"></div>
+            <div class="tick" style="left:0"></div><div class="tick" style="left:25%"></div>
+            <div class="tick zero" style="left:50%"></div>
+            <div class="tick" style="left:75%"></div><div class="tick" style="left:100%"></div>
+            <div class="needle" id="needle" style="left:50%"></div>
+            <div class="cents" id="cents">flat · in tune · sharp</div>
+          </div>
+          <div class="input-meter" title="Microphone input level"><span class="label">Mic</span><div class="bar"><div id="input-level"></div></div></div>
+        </div>
+        <div class="trace-box"><canvas class="trace" id="trace" aria-label="Pitch over time"></canvas></div>
+      </div>
+      <p class="hint">Hum on "mmm" or "doo", one note at a time, in a quiet room. Pitch detection runs on your device: nothing is uploaded.</p>
+    </section>
+
+    <section class="panel metro" id="metro" aria-labelledby="metro-h">
+      <div class="metro-head">
+        <h2 id="metro-h">Metronome</h2>
+        <button type="button" class="metro-sum" id="metro-toggle" aria-expanded="true" aria-controls="metro-body"><span id="metro-sum">90 BPM · 4/4</span><span class="chev" aria-hidden="true"></span></button>
+      </div>
+      <div class="metro-pulse">
+        <div class="beat-dots" id="metro-dots" aria-hidden="true"></div>
+        <button type="button" class="primary metro-go" id="metro-go" aria-pressed="false">Start</button>
+      </div>
+      <div class="metro-body" id="metro-body">
+        <div class="bpm-row">
+          <button type="button" class="step" id="bpm-down" aria-label="Slower">−</button>
+          <div class="bpm"><output id="bpm-val" for="bpm-slider">90</output><span class="label" id="bpm-unit">beats per minute</span></div>
+          <button type="button" class="step" id="bpm-up" aria-label="Faster">+</button>
+        </div>
+        <input type="range" id="bpm-slider" min="40" max="240" step="1" value="90" aria-label="Tempo in beats per minute">
+        <div class="metro-row">
+          <button type="button" class="tap" id="tap">Tap the beat</button>
+          <div class="seg big" role="group" aria-label="Beats in a bar">
+            <button type="button" data-sig="4/4" aria-pressed="true">4/4</button>
+            <button type="button" data-sig="3/4" aria-pressed="false">3/4</button>
+            <button type="button" data-sig="6/8" aria-pressed="false">6/8</button>
+          </div>
+        </div>
+        <div class="metro-row">
+          <button type="button" class="toggle" id="metro-sound" aria-pressed="true">Sound</button>
+          <button type="button" class="toggle" id="metro-accent" aria-pressed="true">Louder beat 1</button>
+        </div>
+        <p class="hint" id="metro-hint"></p>
+      </div>
+    </section>
   </section>
 
-  <section class="panel" aria-labelledby="notes-h">
-    <div class="panel-head">
-      <h2 id="notes-h">What you hummed</h2>
-      <div class="controls">
+  <!-- ===== Notes: fix what was heard ===== -->
+  <section class="view" id="view-notes" role="tabpanel" aria-labelledby="tab-notes" hidden>
+    <section class="panel" aria-labelledby="notes-h">
+      <div class="panel-head">
+        <h2 id="notes-h">Your notes</h2>
         <div class="seg" role="group" aria-label="Octave">
-          <button type="button" data-oct="-1" aria-pressed="false">8va down</button>
+          <button type="button" data-oct="-1" aria-pressed="false">8va ↓</button>
           <button type="button" data-oct="0" aria-pressed="true">As hummed</button>
-          <button type="button" data-oct="1" aria-pressed="false">8va up</button>
+          <button type="button" data-oct="1" aria-pressed="false">8va ↑</button>
         </div>
       </div>
-    </div>
-    <div class="facts" id="facts"></div>
+      <div class="facts" id="facts"></div>
 
-    <div class="editor">
-      <div class="editor-bar">
-        <span class="label">Fix the notes</span>
-        <div class="zoom" role="group" aria-label="Zoom">
-          <button type="button" class="tool" id="zoom-out" aria-label="Zoom out">−</button>
-          <span class="label">Zoom</span>
-          <button type="button" class="tool" id="zoom-in" aria-label="Zoom in">+</button>
+      <div class="editor">
+        <div class="editor-bar">
+          <span class="label">Fix the notes <span id="edit-count" class="edit-count"></span></span>
+          <div class="editor-acts">
+            <button type="button" class="tool" id="ed-undo" title="Undo (Ctrl+Z)">Undo</button>
+            <button type="button" class="tool" id="ed-reset" title="Throw away all edits">Back to my hum</button>
+            <div class="zoom" role="group" aria-label="Zoom">
+              <button type="button" class="tool" id="zoom-out" aria-label="Zoom out">−</button>
+              <button type="button" class="tool" id="zoom-in" aria-label="Zoom in">+</button>
+            </div>
+          </div>
         </div>
+        <div class="tools" id="ed-tools" role="toolbar" aria-label="Edit the selected note">
+          <div class="ed-head">
+            <span class="ed-name" id="ed-name">Tap a note to edit it</span>
+            <button type="button" class="tool ed-done" id="ed-done">Done</button>
+          </div>
+          <div class="tool-group ed-pitch">
+            <button type="button" class="tool" id="ed-prev" title="Previous note (←)" aria-label="Previous note">◀</button>
+            <button type="button" class="tool big" id="ed-down" title="Semitone down (↓)">▼ Lower</button>
+            <button type="button" class="tool big" id="ed-up" title="Semitone up (↑)">▲ Higher</button>
+            <button type="button" class="tool" id="ed-next" title="Next note (→)" aria-label="Next note">▶</button>
+          </div>
+          <div class="tool-group">
+            <button type="button" class="tool" id="ed-shorter" title="Make shorter">Shorter</button>
+            <button type="button" class="tool" id="ed-longer" title="Make longer">Longer</button>
+            <button type="button" class="tool" id="ed-split" title="Split the note in two">Split</button>
+            <button type="button" class="tool" id="ed-merge" title="Join with the next note">Join</button>
+            <button type="button" class="tool" id="ed-delete" title="Delete (Del)">Delete</button>
+          </div>
+          <div class="tool-group ed-last">
+            <button type="button" class="tool" id="ed-oct-down" title="Octave down (Shift+↓)">▼ Octave</button>
+            <button type="button" class="tool" id="ed-oct-up" title="Octave up (Shift+↑)">▲ Octave</button>
+          </div>
+        </div>
+        <div class="guess-bar" id="guess" hidden>
+          <p id="guess-text"></p>
+          <button type="button" class="tool" id="guess-keep"></button>
+          <button type="button" class="tool" id="guess-undo"></button>
+        </div>
+        <div id="roll"></div>
+        <details class="help">
+          <summary>How to fix notes</summary>
+          <p class="hint">Drag a note up or down to fix a flat or sharp note, or tap it and use the buttons. A note far too high or low is usually the right note in the wrong octave: use ▲ Octave or ▼ Octave. Delete a wrong note and the notes next to it fill its gap. Drag a selected note's edges to change its length. Double-click an empty spot to add a note (press and hold on a phone). The grey line is your actual voice. Dashed notes (≈) are best guesses: you hummed between two notes, so the app picked the one that fits the tune. Tap one to check it. <b>Back to my hum</b> throws away every edit.</p>
+        </details>
       </div>
-      <div class="tools" id="ed-tools" role="toolbar" aria-label="Edit the selected note">
-        <div class="ed-head">
-          <span class="ed-name" id="ed-name">Tap a note to edit it</span>
-          <button type="button" class="tool ed-done" id="ed-done">Done</button>
-        </div>
-        <div class="tool-group ed-pitch">
-          <button type="button" class="tool" id="ed-prev" title="Previous note (←)" aria-label="Previous note">◀</button>
-          <button type="button" class="tool big" id="ed-down" title="Semitone down (↓)">▼ Lower</button>
-          <button type="button" class="tool big" id="ed-up" title="Semitone up (↑)">▲ Higher</button>
-          <button type="button" class="tool" id="ed-next" title="Next note (→)" aria-label="Next note">▶</button>
-        </div>
-        <div class="tool-group">
-          <button type="button" class="tool" id="ed-shorter" title="Make shorter">Shorter</button>
-          <button type="button" class="tool" id="ed-longer" title="Make longer">Longer</button>
-          <button type="button" class="tool" id="ed-split" title="Split the note in two">Split</button>
-          <button type="button" class="tool" id="ed-merge" title="Join with the next note">Join</button>
-          <button type="button" class="tool" id="ed-delete" title="Delete (Del)">Delete</button>
-        </div>
-        <div class="tool-group ed-last">
-          <button type="button" class="tool" id="ed-oct-down" title="Octave down (Shift+↓)">▼ Octave</button>
-          <button type="button" class="tool" id="ed-oct-up" title="Octave up (Shift+↑)">▲ Octave</button>
-          <button type="button" class="tool" id="ed-undo" title="Undo (Ctrl+Z)">Undo</button>
-          <button type="button" class="tool" id="ed-reset" title="Throw away all edits">Reset</button>
-        </div>
-      </div>
-      <div class="guess-bar" id="guess" hidden>
-        <p id="guess-text"></p>
-        <button type="button" class="tool" id="guess-keep"></button>
-        <button type="button" class="tool" id="guess-undo"></button>
-      </div>
-      <div id="roll"></div>
-      <p class="hint">Drag a note up or down to fix a flat or sharp note, or tap it and use the buttons. A note far too high or low is usually the right note in the wrong octave: use ▲ Octave or ▼ Octave. Delete a wrong note and the notes next to it fill its gap. Drag a selected note's edges to change its length. Double-click an empty spot to add a note (press and hold on a phone). The grey line is your actual voice. Dashed notes (≈) are best guesses: you hummed between two notes, so the app picked the one that fits the tune. Tap one to check it. <span id="edit-count" class="edit-count"></span></p>
-    </div>
+    </section>
 
-    <div class="scroll-x"><div class="blocks" id="blocks"></div></div>
-    <div class="journey" id="journey">
-      <div class="journey-head">
-        <span class="label">Mood for each part</span>
-        <button type="button" class="tool" id="journey-again">Try another version</button>
+    <section class="panel" aria-labelledby="blocks-h">
+      <div class="panel-head">
+        <h2 id="blocks-h">Note by note</h2>
+        <span class="label">with the chords above</span>
       </div>
-      <div class="presets" id="presets" role="group" aria-label="Mood journeys"></div>
-      <div class="scroll-x"><div class="strip" id="strip"></div></div>
-      <div class="strip-pick" id="strip-pick" hidden></div>
-      <p class="hint">Tap a part to change its mood. Press and hold a part to use its mood from there to the end. Only the chords change: your notes stay exactly as they are.</p>
-    </div>
-    <div class="controls">
-      <button type="button" class="primary" id="play-notes">Play notes</button>
-      <button type="button" id="play-chords">Play with chords</button>
-      <button type="button" id="play-hum">Play my hum</button>
-      <button type="button" id="midi">Save MIDI</button>
-    </div>
+      <div class="scroll-x"><div class="blocks" id="blocks"></div></div>
+    </section>
 
     <div class="test-kit" id="test-kit" hidden>
       <div class="test-head">
@@ -178,45 +189,88 @@
     </div>
   </section>
 
-  <section class="panel" aria-labelledby="play-h">
-    <div class="panel-head">
-      <h2 id="play-h">Play it</h2>
-      <div class="seg" role="group" aria-label="Instrument">
-        <button type="button" data-inst="guitar" aria-pressed="true">Guitar</button>
-        <button type="button" data-inst="piano" aria-pressed="false">Piano</button>
+  <!-- ===== Chords: pick a mood, set it per part, see the result ===== -->
+  <section class="view" id="view-chords" role="tabpanel" aria-labelledby="tab-chords" hidden>
+    <section class="panel" aria-labelledby="moods-h">
+      <div class="panel-head">
+        <h2 id="moods-h"><span class="step-n">1</span>Pick a mood</h2>
+        <label class="home-pick"><span class="label">Home note</span><select id="home-key" aria-label="Home note (key)"></select></label>
       </div>
-    </div>
-    <p class="hint" id="inst-hint"></p>
-    <div class="scroll-x" id="instrument"></div>
-    <div class="label">On the staff</div>
-    <div class="scroll-x" id="staff"></div>
+      <p class="hint">Hear the same tune feel different. Your notes never change: a mood only changes the chords underneath. Tap ▶ to listen, then <b>Use</b> the one you like.</p>
+      <div class="scroll-x"><div class="moods" id="moods"></div></div>
+    </section>
+
+    <section class="panel journey" id="journey" aria-labelledby="journey-h">
+      <div class="panel-head">
+        <h2 id="journey-h"><span class="step-n">2</span>Mood for each part</h2>
+        <button type="button" class="tool" id="journey-again">Another version</button>
+      </div>
+      <div class="presets" id="presets" role="group" aria-label="Mood journeys"></div>
+      <div class="scroll-x"><div class="strip" id="strip"></div></div>
+      <div class="strip-pick" id="strip-pick" hidden></div>
+      <p class="hint">Change mood partway through with a preset, or tap a part to pick its mood. Press and hold a part to use its mood from there to the end.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="result-h">
+      <div class="panel-head">
+        <h2 id="result-h"><span class="step-n">3</span>Your chords</h2>
+        <span class="label" id="prog-label"></span>
+      </div>
+      <p class="hint">These are the chords you hear with <b>▶ With chords</b> and get in the MIDI file. Tap one to hear it and see why it fits.</p>
+      <div class="chords" id="progression"></div>
+      <p class="why" id="chord-why" aria-live="polite"></p>
+      <details class="help toolbox">
+        <summary>More chords to try</summary>
+        <div class="label" id="note-chords-label">Chords for one note</div>
+        <div class="chords" id="note-chords"></div>
+        <div class="label" id="palette-label">All chords in this mood</div>
+        <div class="chords" id="palette"></div>
+      </details>
+    </section>
   </section>
 
-  <section class="panel" aria-labelledby="chords-h">
-    <div class="panel-head">
-      <h2 id="chords-h">Chords that fit</h2>
-      <label class="home-pick"><span class="label">Home note</span><select id="home-key" aria-label="Home note (key)"></select></label>
-    </div>
-
-    <div class="label">Pick a mood</div>
-    <p class="hint">Hear the same tune feel different. Your notes stay exactly as you hummed them: a mood only changes the chords underneath.</p>
-    <div class="scroll-x"><div class="moods" id="moods"></div></div>
-
-    <p class="hint">Tap any chord to hear it. It also lights up on the keyboard.</p>
-    <div class="label" id="prog-label">For each phrase, in order</div>
-    <div class="chords" id="progression"></div>
-    <p class="why" id="chord-why" aria-live="polite"></p>
-    <div class="label" id="note-chords-label">Chords for one note</div>
-    <div class="chords" id="note-chords"></div>
-    <div class="label" id="palette-label">Other chords in this key</div>
-    <div class="chords" id="palette"></div>
+  <!-- ===== Play: learn it on an instrument, take it away ===== -->
+  <section class="view" id="view-play" role="tabpanel" aria-labelledby="tab-play" hidden>
+    <section class="panel" aria-labelledby="play-h">
+      <div class="panel-head">
+        <h2 id="play-h">Play it</h2>
+        <div class="seg" role="group" aria-label="Instrument">
+          <button type="button" data-inst="guitar" aria-pressed="true">Guitar</button>
+          <button type="button" data-inst="piano" aria-pressed="false">Piano</button>
+        </div>
+      </div>
+      <p class="hint" id="inst-hint"></p>
+      <div class="scroll-x" id="instrument"></div>
+    </section>
+    <section class="panel" aria-labelledby="staff-h">
+      <h2 id="staff-h">On the staff</h2>
+      <div class="scroll-x" id="staff"></div>
+    </section>
+    <section class="panel" aria-labelledby="save-h">
+      <div class="panel-head">
+        <h2 id="save-h">Take it to your DAW</h2>
+        <button type="button" id="midi">Save MIDI</button>
+      </div>
+      <p class="hint">A MIDI file with the melody and your chords. Drag it into Reaper or any DAW.</p>
+    </section>
   </section>
-
-  <footer>
-    <span>Pitch detection runs on your device. Nothing is uploaded.</span>
-    <span>Best results: hum on "mmm" or "doo", one note at a time, in a quiet room.</span>
-  </footer>
 </main>
+
+<div class="metro-mini" id="metro-mini" hidden>
+  <button type="button" class="metro-mini-bpm" id="metro-mini-show" aria-label="Show the metronome"><b id="metro-mini-bpm">90</b> BPM</button>
+  <div class="beat-dots small" id="metro-mini-dots" aria-hidden="true"></div>
+  <button type="button" class="metro-mini-stop" id="metro-mini-stop">Stop</button>
+</div>
+
+<!-- Messages, shown over whichever section is open. -->
+<p class="toast" id="status" role="status" hidden></p>
+
+<!-- Playback, always in reach. -->
+<div class="player" id="player" role="group" aria-label="Playback">
+  <button type="button" class="primary" id="play-notes" data-play="notes">▶ Notes</button>
+  <button type="button" id="play-chords" data-play="chords">▶ With chords</button>
+  <button type="button" id="play-hum" data-play="hum">▶ My hum</button>
+</div>
 <!--/APP-->
 <script type="module" src="src/app.js"></script>
 </body>
