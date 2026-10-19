@@ -1,6 +1,6 @@
 # Surilo: notes for Claude Code
 
-Surilo (formerly Hum to Notes; the repo and the Pages URL still use hum-to-notes) is a browser app: hum a melody, then see the notes as blocks, on a guitar fretboard, a piano and a staff, with a key guess and chord suggestions. It's a public GitHub portfolio project. It's meant for quick experimenting, not studio-grade transcription.
+Surilo (formerly Hum to Notes; the repo still uses hum-to-notes) is live at https://surilo.vercel.app. It is a browser app: hum a melody, then see the notes as blocks, on a guitar fretboard, a piano and a staff, with a key guess and chord suggestions. It's a public GitHub portfolio project. It's meant for quick experimenting, not studio-grade transcription.
 
 ## Product
 - Free for everyone, open source (MIT), no ads, no account. The only money is an optional tip that unlocks nothing: `TIP_URL` at the top of app.js (empty = no tip button), and later an in-app purchase in the store builds.
@@ -9,7 +9,7 @@ Surilo (formerly Hum to Notes; the repo and the Pages URL still use hum-to-notes
 - Saved settings and the test-hum format keep their old `hum-to-notes.*` / `hum-to-notes-test` names on purpose: renaming them would wipe users' settings and orphan the saved test hums.
 
 ## Stack and constraints
-- Vanilla JS ES modules, no framework and **no build step**. `index.html` loads `src/app.js` directly. Keep it that way so GitHub Pages serves the repo root as-is.
+- Vanilla JS ES modules, no framework and **no build step**. `index.html` loads `src/app.js` directly. Keep it that way: Vercel serves the repo root as-is (`vercel.json`: no framework, no build, output `.`), deploying every push to `main`; the old GitHub Pages copy at binamraaa.github.io/hum-to-notes still works.
 - No runtime dependencies. `esbuild` is a dev-only dependency, used only by `scripts/build-single.mjs` (an optional single-file bundle in `dist/`, which is gitignored).
 - The mic needs `https://` or `localhost`.
 

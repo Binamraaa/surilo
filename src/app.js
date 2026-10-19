@@ -685,7 +685,7 @@ async function toggleRecording() {
     const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
     setStatus(
       inArtifact || err.message === 'no-mic-api'
-        ? 'Live humming needs microphone access, which this preview doesn\'t allow. Record a voice memo on your phone and upload it, or open the GitHub Pages version.'
+        ? 'Live humming needs microphone access, which this preview doesn\'t allow. Record a voice memo on your phone and upload it, or open surilo.vercel.app.'
         : denied
           ? 'Microphone access was blocked. Allow it in your browser\'s site settings, or upload a recording instead.'
           : `Couldn't start the microphone (${err.name || err.message}). Try uploading a recording instead.`,

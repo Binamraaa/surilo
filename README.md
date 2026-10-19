@@ -8,7 +8,7 @@ Made for beginner and intermediate players who can hum a tune but can't yet find
 
 **Free for everyone, always.** No ads, no account, and your voice never leaves your device. If Surilo helps you, you can leave a tip; it unlocks nothing.
 
-**Live demo:** https://binamraaa.github.io/hum-to-notes/
+**Try it:** https://surilo.vercel.app
 
 <!-- Add a demo GIF here: docs/demo.gif -->
 
@@ -63,7 +63,7 @@ For a wider check, `node scripts/sweep.mjs` hums 522 synthetic melodies: steady 
 
 The synthetic sweep checks the code, but only real hums show how well it works on real voices and phone mics. To build a set of real test hums:
 
-1. Open the app with `?test=1` at the end of the address, e.g. `https://binamraaa.github.io/hum-to-notes/?test=1`. Test mode stays on on that device, including in the installed app, until you tap **Turn off** (or open it with `?test=0`).
+1. Open the app with `?test=1` at the end of the address, e.g. `https://surilo.vercel.app/?test=1`. Test mode stays on on that device, including in the installed app, until you tap **Turn off** (or open it with `?test=0`).
 2. Hum a song you know well, then fix every wrong note in the editor. The notes as you leave them are the answer key.
 3. Type the song name and tap **Save as test**. On a phone this opens the share sheet: save the file to a Drive folder. On a computer it downloads.
 4. Run the report on that folder:
