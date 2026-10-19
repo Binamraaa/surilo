@@ -174,3 +174,14 @@ test('scheduler: stop() books nothing more; sound off still pulses', () => {
   f.run(2);
   assert.equal(f.beats.length, n);
 });
+
+test('scheduler: count-in only, the clicks go quiet at bar 1 but keep pulsing', () => {
+  const f = fakeMetronome();
+  f.m.start({ bpm: 120, sig: '4/4', countIn: 1, silentFrom: 0, onBeat: f.onBeat });
+  f.run(4);
+  const bar1 = f.m.barOneAt;
+  assert.equal(f.clicks.length, 4, 'only the count-in clicks make a sound');
+  assert.ok(f.clicks.every((c) => c.when < bar1 - 1e-9));
+  assert.ok(f.beats.filter((b) => b.bar >= 0).length >= 3, 'the beats carry on silently into the hum (bar 0 is bar 1)');
+  assert.ok(f.m.clickTimes.length > 4, 'every beat is still on the grid');
+});

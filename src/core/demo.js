@@ -36,7 +36,11 @@ function rng(seed = 1) {
 /**
  * @param {Array<[number, number]>} melody  [midi, beats]
  * @param {object} [o]
- * @returns {{samples: Float32Array, sampleRate: number, truth: Array<{midi:number,start:number,end:number}>}}
+ * @returns {{samples: Float32Array, sampleRate: number,
+ *   truth: Array<{midi:number, start:number, end:number, beat:number, beats:number}>,
+ *   grid: {bpm:number, endBpm:number, origin:number, timeAt(beat:number):number, clickTimes:number[]}}}
+ *   truth.beat: where each note belongs (quarter-note beats from the first note);
+ *   grid.origin: the time of beat 0; grid.timeAt: the true beat → seconds map (follows endBpm)
  */
 export function synthHum(melody, o = {}) {
   const {
@@ -44,23 +48,39 @@ export function synthHum(melody, o = {}) {
     vibratoCents = 30, vibratoHz = 5.2, noise = 0.02, gap = 0.07, seed = 7, lead = 0.4,
     sloppyCents = 0,  // each note misses its target by up to ± this much
     driftCents = 0,   // the whole hum slides this far, linearly from start to end
+    endBpm = bpm,     // the tempo changes steadily from bpm to this by the end
+    jitterMs = 0,     // each note starts up to ± this early or late
+    lateMs = 0,       // the whole hum is this far behind the beat
+    clicks = null,    // {countIn, perBeat, hz, ms, gain}: mix in metronome clicks on every beat (click bleed)
   } = o;
   const rand = rng(seed);
   // Separate random stream, so adding sloppiness doesn't change the rest of the hum.
   const slop = rng(seed + 1000);
   const beat = 60 / bpm;
-  const total = lead * 2 + melody.reduce((s, [, b]) => s + b * beat, 0);
+  // Seconds from beat 0 to beat b, for a tempo changing steadily from bpm to endBpm.
+  const beatsTotal = melody.reduce((s, [, b]) => s + b, 0);
+  const rate = (endBpm - bpm) / beatsTotal;
+  const steady = endBpm === bpm;
+  const timeAt = (b) => (steady ? b * beat : (60 / rate) * Math.log((bpm + rate * b) / bpm));
+  const timing = jitterMs || lateMs;
+  const total = lead * 2 + (steady ? melody.reduce((s, [, b]) => s + b * beat, 0) : timeAt(beatsTotal))
+    + (timing ? (lateMs + jitterMs) / 1000 : 0);
   const out = new Float32Array(Math.ceil(total * sampleRate));
   const truth = [];
+  const jit = rng(seed + 2000); // its own stream, so timing options don't change anything else
   let t0 = lead;
+  let b0 = 0;
   let phase = 0;
 
   for (const [m, beats] of melody) {
-    const dur = beats * beat;
-    const sounding = Math.max(0.08, dur - gap);
+    const dur = steady ? beats * beat : timeAt(b0 + beats) - timeAt(b0);
+    // A late or jittery singer starts off the beat but still lets go on time.
+    const shift = timing ? (lateMs + (jit() * 2 - 1) * jitterMs) / 1000 : 0;
+    const start = timing ? t0 + shift : t0;
+    const sounding = Math.max(0.08, dur - gap - (timing ? shift - lateMs / 1000 : 0));
     const midi = m + transpose;
-    truth.push({ midi, start: t0, end: t0 + sounding });
-    const s0 = Math.floor(t0 * sampleRate);
+    truth.push({ midi, start, end: start + sounding, beat: b0, beats });
+    const s0 = Math.floor(start * sampleRate);
     const n = Math.floor(sounding * sampleRate);
     const scoop = -0.8 * rand(); // semitones below, at the attack
     const wobble = (rand() - 0.5) * 0.12;
@@ -78,7 +98,24 @@ export function synthHum(melody, o = {}) {
       out[s0 + i] += 0.25 * voice * env;
     }
     t0 += dur;
+    b0 += beats;
   }
   for (let i = 0; i < out.length; i++) out[i] += noise * (rand() * 2 - 1);
-  return { samples: out, sampleRate, truth };
+
+  // Metronome clicks leaking into the mic: short high blips on every beat.
+  const clickTimes = [];
+  if (clicks) {
+    const { countIn = 4, perBeat = 1, hz: pitch = null, ms = 30, gain = 0.35 } = clicks;
+    for (let k = -countIn * perBeat; k <= beatsTotal * perBeat; k++) {
+      const when = lead + (k < 0 ? (k / perBeat) * beat : timeAt(k / perBeat));
+      if (when < 0) continue;
+      clickTimes.push(when);
+      const hz = pitch ?? (k % (4 * perBeat) === 0 ? 1500 : 1000);
+      const s1 = Math.floor(when * sampleRate);
+      for (let i = 0; i < (ms / 1000) * sampleRate && s1 + i < out.length; i++) {
+        out[s1 + i] += gain * Math.sin((2 * Math.PI * hz * i) / sampleRate) * Math.exp(-i / sampleRate / ((ms / 1000) * 0.27));
+      }
+    }
+  }
+  return { samples: out, sampleRate, truth, grid: { bpm, endBpm, origin: lead, timeAt: (b) => lead + timeAt(b), clickTimes } };
 }

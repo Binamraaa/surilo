@@ -40,6 +40,7 @@ export function createMetronome(ctx, {
   let anchor = 0, n = 0, spb = 0.5;
   let beat = 0, bar = 0;          // position of the next click; bar 0 is bar 1, count-in bars are negative
   let barOneAt = null;
+  let silentFrom = null;          // from this bar on, clicks pulse but make no sound (count-in only)
   let clickTimes = [];
   let queue = [];                 // booked clicks waiting for their visual pulse
   let sounding = [];              // booked click sounds, so stop() can cut them
@@ -112,7 +113,7 @@ export function createMetronome(ctx, {
       if (bar === 0 && beat === 0) barOneAt = when;
       clickTimes.push(when);
       queue.push({ beat, bar, when });
-      if (opts.sound) {
+      if (opts.sound && !(silentFrom != null && bar >= silentFrom)) {
         const node = play(when, level);
         if (node) sounding.push({ when, node });
       }
@@ -151,10 +152,17 @@ export function createMetronome(ctx, {
     if (running && tempoChanged) reanchor();
   }
 
-  function start({ countIn = 0, onBeat: cb = () => {}, ...o } = {}) {
+  /**
+   * @param {object} [o]  plus any of set()'s options
+   * @param {number} [o.countIn]  bars of count-in before bar 1
+   * @param {number|null} [o.silentFrom]  bar from which the clicks go quiet but keep pulsing (0 = bar 1)
+   * @param {(beat:number, bar:number, when:number) => void} [o.onBeat]
+   */
+  function start({ countIn = 0, silentFrom: quietAt = null, onBeat: cb = () => {}, ...o } = {}) {
     if (running) stop();
     set(o);
     onBeat = cb;
+    silentFrom = quietAt;
     spb = secondsPerBeat(opts.bpm, opts.sig);
     anchor = now() + LEAD_IN;
     n = 0;

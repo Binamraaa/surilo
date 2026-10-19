@@ -14,6 +14,9 @@ import { playNotes, playOnce, playRecording, stopPlayback, getCtx } from './audi
 import { blocksView, fretboardView, pianoView, staffView, drawTrace } from './ui/views.js';
 import { createRoll } from './ui/roll.js';
 import { createMetronomePanel } from './ui/metronome-panel.js';
+import { createRecordSetup } from './ui/record-setup.js';
+import { createMetronome } from './audio/metronome.js';
+import { trackTempo, secondsPerBeat, beatsPerBar } from './core/rhythm.js';
 import { testModeOn, turnOffTestMode, testHumFile, shareOrDownload } from './ui/test-mode.js';
 import { harmonise, paletteFor } from './core/harmony.js';
 import { MOODS, moodById, JOURNEYS, journeyById, journeyFor } from './core/moods.js';
@@ -42,7 +45,10 @@ const state = {
   recording: null,   // {samples, sampleRate} for "Play my hum"
   source: null,      // where the recording came from: 'mic', 'upload' or 'sample'
   micLabel: null,
-  recTempo: null,    // {bpm, sig} if the metronome was running while you hummed
+  recTempo: null,    // {bpm, sig, …} if you hummed to a beat (saved with test hums)
+  tempo: null,       // the beat of this hum: {bpm, sig, mode, origin, offset, drift, bpmEnd, beatAt, secondsAt}, or null
+  take: null,        // while humming to a count-in: {m (metronome), bpm, sig, mode, countIn}
+  countingIn: false,
   octave: 0,
   instrument: 'guitar',
   active: null,      // index of the note currently sounding
@@ -68,8 +74,17 @@ const state = {
 
 // ---------- Analysis ----------
 
-function setAnalysis({ frames, recording }) {
-  const { notes, tuning } = transcribe(frames, { trust: state.trust });
+function setAnalysis({ frames, recording, mask = null, tempo = null }) {
+  const { notes, tuning } = transcribe(frames, { trust: state.trust, mask });
+  // Hummed to a beat: where each note sits in the bar, following the singer's own tempo.
+  state.tempo = tempo && {
+    ...tempo,
+    ...trackTempo(notes.map((n) => n.start - tempo.origin), { bpm: tempo.bpm, sig: tempo.sig, limit: tempo.mode === 'throughout' ? 0.03 : 0.12 }),
+  };
+  if (state.tempo) {
+    const { bpm, sig, mode, countIn, origin, offset, drift } = state.tempo;
+    state.recTempo = { bpm, sig, mode, countIn, origin, offset, drift };
+  }
   state.frames = frames;
   state.detected = withIds(notes);
   state.original = state.detected;
@@ -128,6 +143,7 @@ function fitStrip(strip, n) {
 
 let roll = null;
 let metro = null;
+let recSetup = null;
 
 function renderRoll() {
   roll.render({
@@ -210,6 +226,7 @@ function renderFacts() {
     state.homeKey
       ? fact('Home key', keyName(state.homeKey), 'picked by you')
       : fact('Likely key', k1.name, close ? `or ${k2.name}` : ''),
+    state.tempo ? fact('Tempo', `${state.tempo.bpm} BPM`, driftShown(state.tempo) ? `${state.tempo.sig} · you went ${Math.round(state.tempo.bpmStart)} → ${Math.round(state.tempo.bpmEnd)}` : state.tempo.sig) : '',
     fact('Notes', state.notes.length),
     fact('Range', `${midiToName(lo, { flats: state.flats })}–${midiToName(hi, { flats: state.flats })}`),
     fact('Your tuning', Math.abs(tune) < 8 ? 'Spot on' : `${Math.abs(tune)}¢ ${tune > 0 ? 'sharp' : 'flat'}`, Math.abs(tune) >= 8 ? 'corrected for you' : ''),
@@ -463,6 +480,7 @@ function renderActive() {
 
 function showLive(frame) {
   const live = $('live');
+  if (state.countingIn) return; // the big number is the countdown
   if (!frame || frame.midi == null) {
     live.classList.add('idle');
     if (!frame) $('live-chords').textContent = '';
@@ -573,13 +591,17 @@ function setPlaying(kind) {
 async function toggleRecording() {
   if (state.mic) return stopRecording();
   stopPlayback();
-  state.recTempo = metro.metronome?.running ? { bpm: metro.bpm, sig: metro.sig } : null;
+  const beat = recSetup.mode; // 'off', 'countin' or 'throughout'
+  // Off, but humming along to the metronome card: remember the tempo for test hums, as before.
+  state.recTempo = beat === 'off' && metro.metronome?.running ? { bpm: metro.bpm, sig: metro.sig } : null;
+  if (beat !== 'off') metro.stop(); // its clicks would clash with the count-in
   setStatus('Asking for your microphone…');
   try {
     let lastRender = 0;
     state.frames = [];
     let peakInput = 0;
     const startedAt = performance.now();
+    // One audio clock for the mic and the clicks, so the hum can be lined up with the beat.
     state.mic = await startMic((f) => {
       state.frames.push(f);
       showLive(f);
@@ -598,11 +620,12 @@ async function toggleRecording() {
         renderFacts();
         renderBlocks();
       }
-    });
+    }, { ctx: getCtx() });
     $('rec').classList.add('on');
     $('rec-label').textContent = 'Stop';
     $('mode-label').textContent = 'Listening';
-    setStatus(`Listening on ${state.mic.label}. Hum one note at a time, then press Stop.`);
+    if (beat === 'off') setStatus(`Listening on ${state.mic.label}. Hum one note at a time, then press Stop.`);
+    else startTake(beat);
   } catch (err) {
     state.mic = null;
     const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
@@ -617,9 +640,65 @@ async function toggleRecording() {
   }
 }
 
+/** Count in, then keep the beat on the dots (and, with "Click all the way", in your ears). */
+function startTake(mode) {
+  const { bpm, sig } = metro;
+  const bpb = beatsPerBar(sig);
+  const dots = $('rec-dots');
+  dots.innerHTML = Array.from({ length: bpb }, (_, i) => `<span class="dot${i === 0 ? ' first' : ''}${sig === '6/8' && i === 3 ? ' group' : ''}"></span>`).join('');
+  dots.hidden = false;
+  const m = createMetronome(getCtx());
+  state.take = { m, bpm, sig, mode, countIn: recSetup.bars };
+  state.countingIn = true;
+  $('live').classList.add('counting');
+  $('live-name').textContent = '';
+  $('live-hz').textContent = 'listen to the count-in';
+  m.start({
+    bpm, sig, sound: true, accent: true, countIn: recSetup.bars,
+    silentFrom: mode === 'countin' ? 0 : null,
+    onBeat: (b, bar) => {
+      [...dots.children].forEach((d, i) => d.classList.toggle('on', i === b));
+      if (recSetup.vibrate) navigator.vibrate(b === 0 ? 35 : 15);
+      if (bar < 0) {
+        $('live-name').textContent = String(-bar * bpb - b); // 4, 3, 2, 1
+      } else if (state.countingIn) {
+        state.countingIn = false;
+        $('live').classList.remove('counting');
+        $('live-name').textContent = 'Hum!';
+        $('live-hz').textContent = 'the dots keep the beat';
+        setStatus(`Hum now${mode === 'countin' ? ': the clicks stop, and the dots keep the beat' : ''}. Press Stop when you're done.`);
+      }
+    },
+  });
+  setStatus(`${bpm} BPM: ${recSetup.bars === 1 ? 'one bar' : 'two bars'} of clicks, then hum from beat 1.`);
+}
+
+/** Where bar 1 and the audible clicks fall, in the recording's own seconds. */
+function takeTiming(take, startedAt) {
+  const ctx = getCtx();
+  // A click reaches the speaker, and the singer, a little after it's scheduled. The rest of
+  // the delay (the mic's own latency) shows up as lateness, which tempo tracking corrects.
+  const delay = (ctx.outputLatency || 0) + (ctx.baseLatency || 0);
+  const toRec = (t) => t + delay - startedAt;
+  const bar1 = take.m.barOneAt;
+  const heard = take.m.clickTimes.filter((t) => take.mode === 'throughout' || t < bar1 - 1e-6);
+  return { bpm: take.bpm, sig: take.sig, mode: take.mode, countIn: take.countIn, origin: toRec(bar1), clicks: heard.map(toRec) };
+}
+
 function stopRecording() {
   state.micLabel = state.mic.label;
+  const startedAt = state.mic.startedAt;
   const rec = state.mic.stop();
+  const take = state.take;
+  state.take = null;
+  if (take) {
+    take.m.stop();
+    $('rec-dots').hidden = true;
+    state.countingIn = false;
+    $('live').classList.remove('counting');
+    $('live-hz').textContent = 'hum steadily on "mmm"';
+    if (startedAt != null) rec.tempo = takeTiming(take, startedAt);
+  }
   showInputLevel(0);
   state.mic = null;
   $('rec').classList.remove('on');
@@ -635,13 +714,26 @@ function analyseRecording(rec, label, { quiet = false } = {}) {
   // Let the status paint before the (sub-second) analysis blocks the thread.
   setTimeout(() => {
     const frames = analyseBuffer(rec.samples, rec.sampleRate);
-    setAnalysis({ frames, recording: rec });
+    const tempo = rec.tempo || null;
+    let mask = null;
+    if (tempo) {
+      if (rec.samples.length / rec.sampleRate < tempo.origin + 0.2) {
+        setStatus('You stopped during the count-in. Press Start humming, wait for the clicks, then hum from beat 1.', true);
+        return;
+      }
+      // The count-in is only clicks: ignore it, except that a note may start up to
+      // half a beat early (a pickup, or just eager). Clicks can't start a note.
+      const from = tempo.origin - secondsPerBeat(tempo.bpm, tempo.sig) / 2;
+      for (const f of frames) if (f.t < from) f.midi = null;
+      mask = tempo.clicks.map((t) => [t, t + 0.035]);
+    }
+    setAnalysis({ frames, recording: rec, mask, tempo });
     const n = state.notes.length;
     const guesses = state.notes.filter((x) => x.adjusted).length;
     if (n) {
       if (quiet) return;
       showView('notes');
-      setStatus(`Found ${n} note${n === 1 ? '' : 's'} in ${label}.${guesses ? ` ${guesses === 1 ? 'One was' : `${guesses} were`} between two notes, so I picked the one that fits the tune (dashed, marked ≈). Tap it to check.` : ''}`);
+      setStatus(`Found ${n} note${n === 1 ? '' : 's'} in ${label}.${guesses ? ` ${guesses === 1 ? 'One was' : `${guesses} were`} between two notes, so I picked the one that fits the tune (dashed, marked ≈). Tap it to check.` : ''}${timingNote()}`);
       return;
     }
     // Explain *why* nothing was found, so it's clear whether it's the mic or the hum.
@@ -659,6 +751,22 @@ function analyseRecording(rec, label, { quiet = false } = {}) {
   }, 30);
 }
 
+/** Worth mentioning a tempo change? Only a clear one, measured over enough bars to trust. */
+const driftShown = (t) => Math.abs(t.drift) >= 3 && t.bars >= 4;
+
+/** What the app noticed about your timing, in plain words (empty if you were on the beat). */
+function timingNote() {
+  const t = state.tempo;
+  if (!t) return '';
+  const parts = [];
+  const ms = Math.round(t.offset * 1000);
+  if (Math.abs(ms) >= 25) parts.push(`You sang about ${Math.abs(ms)} ms ${ms > 0 ? 'behind' : 'ahead of'} the beat; the app allows for that.`);
+  if (driftShown(t)) {
+    parts.push(`You ${t.drift > 0 ? 'sped up' : 'slowed down'} a little (about ${Math.round(t.bpmStart)} → ${Math.round(t.bpmEnd)} BPM); the app follows you, so your notes stay on their beats.`);
+  }
+  return parts.length ? ` ${parts.join(' ')}` : '';
+}
+
 async function onFile(e) {
   const file = e.target.files[0];
   if (!file) return;
@@ -673,6 +781,7 @@ async function onFile(e) {
     $('mode-label').textContent = 'Uploaded';
     $('sample').value = '';
     Object.assign(state, { source: 'upload', micLabel: file.name, recTempo: null });
+    rec.tempo = null;
     analyseRecording(rec, file.name);
   } catch {
     setStatus('That file couldn\'t be read as audio. Try a .m4a, .mp3 or .wav voice memo.', true);
@@ -805,6 +914,7 @@ function applyEdit(edit) {
 function init() {
   initTheme();
   metro = createMetronomePanel({ getCtx });
+  recSetup = createRecordSetup({ metro, say: setStatus });
   if (testModeOn()) $('test-kit').hidden = false;
   $('test-save').addEventListener('click', saveTestHum);
   $('test-song').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveTestHum(); } });

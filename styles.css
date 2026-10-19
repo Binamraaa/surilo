@@ -117,6 +117,20 @@ details.help[open] summary::before { transform: rotate(90deg); }
 .toolbox .label { display: block; margin: 6px 0 8px; }
 .toolbox .chords + .label { margin-top: 16px; }
 
+/* Humming to a beat: the setup above the record button, and the dots that keep time. */
+.rec-setup { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--rule); border-radius: 10px; background: var(--paper); }
+.rec-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.rec-row .seg button { min-height: 40px; }
+.rec-row[hidden], .rec-setup .hint:empty { display: none; }
+#rec-tempo { min-height: 40px; font: 700 14px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.rec-dots { justify-content: center; min-height: 40px; }
+.rec-dots[hidden] { display: none; }
+.rec-dots .dot { width: 30px; height: 30px; }
+.live-note.counting .name { color: var(--accent); }
+@media (max-width: 720px) {
+  .rec-row .seg { width: 100%; }
+  .rec-row .seg button { flex: 1 1 0; padding: 8px 6px; font-size: 13px; }
+}
 button.rec.big { min-height: 58px; font-size: 17px; justify-content: center; justify-self: start; min-width: 280px; }
 .or-row { display: flex; flex-wrap: wrap; gap: 10px; }
 

@@ -48,7 +48,27 @@
         <h2 id="capture-h">Hum a tune</h2>
         <span class="label" id="mode-label">Sample loaded</span>
       </div>
+      <div class="rec-setup" id="rec-setup">
+        <div class="rec-row">
+          <span class="label">Hum to a beat</span>
+          <div class="seg" role="group" aria-label="Hum to a beat" id="click-mode">
+            <button type="button" data-click="off" aria-pressed="false">Off</button>
+            <button type="button" data-click="countin" aria-pressed="true">Count me in</button>
+            <button type="button" data-click="throughout" aria-pressed="false">Click all the way</button>
+          </div>
+        </div>
+        <div class="rec-row" id="rec-beat-row">
+          <button type="button" class="tool" id="rec-tempo" aria-label="Change the tempo"></button>
+          <div class="seg" role="group" aria-label="Count-in length" id="count-in">
+            <button type="button" data-bars="1" aria-pressed="true">1 bar</button>
+            <button type="button" data-bars="2" aria-pressed="false">2 bars</button>
+          </div>
+          <button type="button" class="toggle" id="rec-vibrate" aria-pressed="false" hidden>Vibrate</button>
+        </div>
+        <p class="hint" id="rec-hint"></p>
+      </div>
       <button class="rec primary big" id="rec" type="button"><span class="dot"></span><span id="rec-label">Start humming</span></button>
+      <div class="beat-dots rec-dots" id="rec-dots" aria-hidden="true" hidden></div>
       <div class="or-row">
         <label class="btn" for="file">Upload a recording<input type="file" id="file" accept="audio/*,.m4a,.wav,.mp3,.ogg,.webm,.aac"></label>
         <select id="sample" aria-label="Try a sample hum">

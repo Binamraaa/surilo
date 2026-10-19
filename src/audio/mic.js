@@ -4,18 +4,22 @@ import { analyseFrame, rms } from '../core/pitch.js';
 
 /**
  * Start listening. `onFrame({t, midi, hz, level, clarity})` fires ~45×/s.
+ * Pass the app's AudioContext as `ctx` to share its clock with the metronome:
+ * `startedAt` is then the context time of the recording's first sample, so a hum
+ * can be lined up with the clicks.
  * Returns a handle with stop() → {samples, sampleRate}.
  */
-export async function startMic(onFrame) {
+export async function startMic(onFrame, { ctx: shared = null } = {}) {
   if (!navigator.mediaDevices?.getUserMedia) throw new Error('no-mic-api');
   const stream = await navigator.mediaDevices.getUserMedia({
     // Browser "voice" processing smears pitch; turn it off for cleaner tracking.
     audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
   });
   const AC = window.AudioContext || window.webkitAudioContext;
-  const ctx = new AC();
+  const ctx = shared || new AC();
   await ctx.resume();
   const sr = ctx.sampleRate;
+  let startedAt = null;
   const src = ctx.createMediaStreamSource(stream);
   const hop = 1024;
   const frameSize = sr > 30000 ? 2048 : 1024;
@@ -39,6 +43,8 @@ export async function startMic(onFrame) {
   proc.onaudioprocess = (e) => {
     const input = e.inputBuffer.getChannelData(0);
     const copy = new Float32Array(input);
+    // This buffer has just filled, so its first sample is one buffer back from now.
+    if (startedAt == null) startedAt = ctx.currentTime - copy.length / sr;
     chunks.push(copy);
     total += copy.length;
     ring.copyWithin(0, copy.length);
@@ -60,11 +66,14 @@ export async function startMic(onFrame) {
   return {
     sampleRate: sr,
     label: track?.label || 'default microphone',
+    /** Context time of the first recorded sample (null until audio arrives). */
+    get startedAt() { return startedAt; },
     stop() {
       proc.onaudioprocess = null;
       try { src.disconnect(); proc.disconnect(); } catch { /* already gone */ }
       stream.getTracks().forEach((tr) => tr.stop());
-      ctx.close();
+      if (!shared) ctx.close();
+      try { mute.disconnect(); } catch { /* already gone */ }
       const samples = new Float32Array(total);
       let o = 0;
       for (const c of chunks) { samples.set(c, o); o += c.length; }

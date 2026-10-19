@@ -40,6 +40,7 @@ export function createMetronomePanel({ getCtx }) {
   let cardVisible = true;
 
   const save = () => { try { localStorage.setItem(STORE, JSON.stringify(s)); } catch { /* private mode: just don't remember */ } };
+  const listeners = [];
 
   // ---- Drawing ----
   function drawDots() {
@@ -110,6 +111,7 @@ export function createMetronomePanel({ getCtx }) {
     m?.set({ bpm: s.bpm, sig: s.sig, sound: s.sound, accent: s.accent });
     drawSettings();
     save();
+    for (const fn of listeners) fn(s);
   }
 
   function toggle() {
@@ -187,5 +189,9 @@ export function createMetronomePanel({ getCtx }) {
     get sig() { return s.sig; },
     get metronome() { return m; },
     stop() { if (m?.running) { m.stop(); drawRunning(); } },
+    /** Show the tempo settings (used by the recording setup's tempo button). */
+    open() { s.open = true; drawOpen(); save(); $('metro').scrollIntoView({ block: 'start' }); },
+    /** Hear about tempo or time-signature changes. */
+    onChange(fn) { listeners.push(fn); },
   };
 }

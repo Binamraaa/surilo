@@ -69,13 +69,15 @@ export function estimateTuningOffset(frames, minCount = 5) {
  * @param {number} [opts.dipRatio=0.45]   a loudness dip below this × the note's peak…
  * @param {number} [opts.riseRatio=0.75]  …followed by a rise above this re-articulates (repeated notes: "mm-mm")
  * @param {boolean} [opts.autoTune=true]  snap relative to the singer's own tuning
+ * @param {Array<[number, number]>} [opts.mask]  time windows (s, sorted) where a metronome click may
+ *   leak into the mic: frames there still count towards a note, but can't start one
  * @returns {{notes: Array<{midi:number, start:number, end:number, cents:number, pitch:number}>, tuning:number}}
  *   midi = snapped integer note; pitch = raw median pitch; cents = how far off the hum was.
  */
 export function framesToNotes(frames, opts = {}) {
   const {
     minNoteMs = 90, maxGapMs = 70, changeSemis = 0.6, changeMs = 80,
-    mergeGapMs = 0, autoTune = true, smoothRadius = 2, dipRatio = 0.45, riseRatio = 0.75,
+    mergeGapMs = 0, autoTune = true, smoothRadius = 2, dipRatio = 0.45, riseRatio = 0.75, mask = null,
   } = opts;
   if (frames.length < 2) return { notes: [], tuning: 0 };
 
@@ -84,6 +86,13 @@ export function framesToNotes(frames, opts = {}) {
   const changeRun = Math.max(2, Math.round(changeMs / 1000 / hop));
 
   const sm = smoothFrames(frames, smoothRadius);
+  // Is this frame inside a click window? Frames come in time order, so walk the windows once.
+  let mi = 0;
+  const masked = (t) => {
+    if (!mask?.length) return false;
+    while (mi < mask.length && mask[mi][1] < t) mi++;
+    return mi < mask.length && mask[mi][0] <= t;
+  };
 
   const segments = [];
   let cur = null;      // { frames: [...] }
@@ -110,10 +119,11 @@ export function framesToNotes(frames, opts = {}) {
       continue;
     }
     gap = 0;
-    if (!cur) { start([f]); continue; }
+    const click = masked(f.t);
+    if (!cur) { if (!click) start([f]); continue; }
 
     // Re-articulation: same pitch, but the voice dipped and came back ("da-da").
-    if (dip && level >= peak * riseRatio && cur.frames.length >= minFrames) {
+    if (!click && dip && level >= peak * riseRatio && cur.frames.length >= minFrames) {
       if (pending.length) cur.frames.push(...pending);
       segments.push(cur.frames);
       start([f]);
@@ -125,6 +135,8 @@ export function framesToNotes(frames, opts = {}) {
       // Back on the note: a short excursion was just vibrato or a scoop.
       if (pending.length) { cur.frames.push(...pending); pending = []; }
       cur.frames.push(f);
+    } else if (click && !pending.length) {
+      // A click can't begin a new note on its own.
     } else {
       // A run of disagreeing frames must itself be stable to start a new note.
       if (pending.length && Math.abs(f.midi - median(pending.map((p) => p.midi))) >= changeSemis) pending = [];
