@@ -9,7 +9,7 @@ Surilo (formerly Hum to Notes; the repo still uses hum-to-notes) is live at http
 - Saved settings and the test-hum format keep their old `hum-to-notes.*` / `hum-to-notes-test` names on purpose: renaming them would wipe users' settings and orphan the saved test hums.
 
 ## Stack and constraints
-- Vanilla JS ES modules, no framework and **no build step**. `index.html` loads `src/app.js` directly. Keep it that way: Vercel serves the repo root as-is (`vercel.json`: no framework, no build, output `.`), deploying every push to `main`; the old GitHub Pages copy at binamraaa.github.io/hum-to-notes still works.
+- Vanilla JS ES modules, no framework and **no build step**. `index.html` loads `src/app.js` directly. Keep it that way: Vercel serves the repo root as-is (`vercel.json`: no framework, no build, output `.`), deploying every push to `main`. GitHub Pages is switched off (2026-10-19): Vercel is the only copy.
 - No runtime dependencies. `esbuild` is a dev-only dependency, used only by `scripts/build-single.mjs` (an optional single-file bundle in `dist/`, which is gitignored).
 - The mic needs `https://` or `localhost`.
 
