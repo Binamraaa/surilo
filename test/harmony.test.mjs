@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { harmonise, parseNumeral, chordFor, noteRole, supports, paletteFor, CHORD_TYPES } from '../src/core/harmony.js';
-import { MOODS, moodById, recipeFor } from '../src/core/moods.js';
+import { MOODS, moodById, recipeFor, JOURNEYS, journeyById, journeyFor } from '../src/core/moods.js';
+import { phraseSlots } from '../src/core/theory.js';
 import { DEMO_MELODIES } from '../src/core/demo.js';
 
 const mel = (name) => DEMO_MELODIES[name].map(([m, b], i, a) => {
@@ -180,4 +181,94 @@ test('explanations name the note and its job in the chord', () => {
       if (e.borrowed && !e.clash) assert.match(e.why, /Borrowed/);
     }
   }
+});
+
+// ---------- Journeys ----------
+
+const run = (name, preset, mood = 'bright', at = null) => {
+  const notes = mel(name);
+  const ids = journeyFor(preset, phraseSlots(notes), { mood, at });
+  return { notes, ids, vs: harmonise(notes, { journey: ids, lift: !!preset.lift }) };
+};
+
+test('journeyFor: one mood for Steady, a change about halfway for the others', () => {
+  const slots = phraseSlots(mel('Ode to Joy')); // 4 slots
+  assert.deepEqual(journeyFor(journeyById('steady'), slots, { mood: 'dark' }), ['dark', 'dark', 'dark', 'dark']);
+  assert.deepEqual(journeyFor(journeyById('bright-dark'), slots), ['bright', 'bright', 'dark', 'dark']);
+  assert.deepEqual(journeyFor(journeyById('bright-dark'), slots, { at: 3 }), ['bright', 'bright', 'bright', 'dark']);
+  // It prefers to change at the end of a phrase (after a pause).
+  const paused = [0, 1, 2, 3, 4, 5].map((i) => ({ first: i, count: 1, phraseEnd: i === 1 }));
+  assert.deepEqual(journeyFor(journeyById('build-up'), paused), ['bright', 'bright', 'epic', 'epic', 'epic', 'epic']);
+  assert.deepEqual(journeyFor(journeyById('bright-dark'), [{ first: 0, count: 3, phraseEnd: true }]), ['bright']);
+  for (const j of JOURNEYS) for (const id of j.moods || []) assert.ok(moodById(id), `${j.id}: ${id}`);
+});
+
+test('Rule 1 on journeys: no journey changes the melody', () => {
+  for (const name of DEMOS) {
+    const before = JSON.stringify(mel(name));
+    for (const j of JOURNEYS) {
+      for (const mood of j.moods ? ['bright'] : MOODS.map((m) => m.id)) {
+        const { notes, vs } = run(name, j, mood);
+        assert.equal(JSON.stringify(notes), before);
+        for (const v of vs) assert.equal(v.reduce((n, e) => n + e.noteCount, 0), notes.length, `${j.id} on ${name}`);
+      }
+    }
+  }
+});
+
+test('Rule 2 on journeys: every chord still supports its strong notes, or is borrowed', () => {
+  for (const name of DEMOS) {
+    for (const j of JOURNEYS.filter((x) => x.moods)) {
+      const { notes, vs } = run(name, j);
+      for (const v of vs) {
+        for (const e of v) {
+          if (e.borrowed) continue;
+          for (const k of e.strong) assert.ok(supports(e.chord, pcOf(notes[k].midi), moodById(e.mood)), `${j.id} on ${name}: ${e.chord.name}`);
+        }
+      }
+    }
+  }
+});
+
+test('Bright → Dark changes mood at the given slot, through a pivot chord', () => {
+  const { ids, vs } = run('Ode to Joy', journeyById('bright-dark'), 'bright', 2);
+  const prog = vs[0];
+  assert.deepEqual(ids, ['bright', 'bright', 'dark', 'dark']);
+  assert.deepEqual(prog.map((e) => e.mood), ['bright', 'bright', 'dark', 'dark']);
+  // Am is in both moods and fits either side of the change.
+  const [a, b] = [prog[1], prog[2]];
+  assert.ok(a.pivot || b.pivot, `${a.chord.name} → ${b.chord.name}`);
+  const pivot = a.pivot ? a : b;
+  assert.ok(paletteFor(moodById('bright'), C).some((c) => c.name === pivot.chord.name));
+  assert.ok(paletteFor(moodById('dark'), C).some((c) => c.name === pivot.chord.name));
+  assert.match(pivot.why, /belongs to both Bright and Dark/);
+});
+
+test('with no chord in common, a journey turns with a V7 into the new mood', () => {
+  // Jazzy and Dark share no chord. G A B D | C B A A in C: E7 (B, D) leads into Am (C).
+  const notes = [67, 69, 71, 74, 72, 71, 69, 69].map((m, i) => ({ midi: m, start: i * 0.5, end: i * 0.5 + 0.45 }));
+  const [prog] = harmonise(notes, { journey: ['jazzy', 'dark'], home: C });
+  const at = prog.findIndex((e) => e.mood === 'dark');
+  const [a, b] = [prog[at - 1], prog[at]];
+  assert.ok(!a.pivot && !b.pivot);
+  assert.ok(a.turnaround, a.chord.name);
+  assert.equal(a.chord.type, '7');
+  assert.equal((a.chord.root - b.chord.root + 12) % 12, 7, `${a.chord.name} → ${b.chord.name}`);
+  assert.match(a.why, /leads into/);
+});
+
+test('Dark → Hopeful ends on the major home chord (the Picardy lift)', () => {
+  for (const name of ['Ode to Joy', 'Twinkle Twinkle']) {
+    const { vs } = run(name, journeyById('dark-hopeful'));
+    const end = vs[0].at(-1);
+    assert.equal(end.chord.name, 'C', name);
+    assert.ok(end.lift && !end.borrowed);
+  }
+  // Without the lift, the same moods don't end there.
+  const notes = mel('Ode to Joy');
+  assert.notEqual(harmonise(notes, { journey: ['dark', 'dark', 'hopeful', 'hopeful'] })[0].at(-1).chord.name, 'C');
+});
+
+test('journeys are repeatable', () => {
+  for (const j of JOURNEYS) assert.deepEqual(run('Für Elise', j).vs, run('Für Elise', j).vs);
 });

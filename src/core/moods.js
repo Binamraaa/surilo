@@ -161,3 +161,43 @@ export const moodById = (id) => MOODS.find((m) => m.id === id) || null;
 
 /** The recipe a mood uses for this home key (major or minor). */
 export const recipeFor = (mood, home) => (home?.mode === 'minor' ? mood.minor : mood.major);
+
+// ---------- Journeys: moods that change partway through the melody ----------
+
+/**
+ * Preset journeys. `moods: null` means one mood all the way through (the one picked).
+ * `lift`: end on the major home chord even in a minor mood (a "Picardy third").
+ */
+export const JOURNEYS = [
+  { id: 'steady', name: 'Steady', moods: null, about: 'One mood all the way through.' },
+  { id: 'bright-dark', name: 'Bright → Dark', moods: ['bright', 'dark'], about: 'Starts happy, turns serious.' },
+  { id: 'dark-hopeful', name: 'Dark → Hopeful', moods: ['dark', 'hopeful'], lift: true, about: 'Starts sad, and ends on a major home chord, like the sun coming out.' },
+  { id: 'build-up', name: 'Build-up', moods: ['bright', 'epic'], about: 'Starts light, ends dramatic.' },
+  { id: 'dreamy-bright', name: 'Dreamy → Bright', moods: ['dreamy', 'bright'], about: 'Floats, then lands.' },
+  { id: 'bittersweet-bright', name: 'Bittersweet → Bright', moods: ['bittersweet', 'bright'], about: 'Wistful, then it all resolves.' },
+];
+
+export const journeyById = (id) => JOURNEYS.find((j) => j.id === id) || null;
+
+/**
+ * The mood of each slot for a preset journey. The change comes about halfway,
+ * moved to a nearby phrase boundary if there is one; `at` sets the first slot
+ * of the second mood instead.
+ * @returns {string[]} one mood id per slot
+ */
+export function journeyFor(preset, slots, { mood = 'bright', at = null } = {}) {
+  const n = slots.length;
+  if (!preset?.moods) return slots.map(() => mood);
+  const [a, b] = preset.moods;
+  let split = at;
+  if (split == null) {
+    split = Math.ceil(n / 2);
+    let bestD = Infinity;
+    for (let i = 1; i < n; i++) {
+      const d = Math.abs(i - n / 2);
+      if (slots[i - 1].phraseEnd && d <= n / 4 && d < bestD) { bestD = d; split = i; }
+    }
+  }
+  split = Math.max(n > 1 ? 1 : 0, Math.min(n, split));
+  return slots.map((_, i) => (i < split ? a : b));
+}

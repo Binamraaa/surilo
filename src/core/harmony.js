@@ -232,10 +232,55 @@ function candidates(notes, sp, fromEnd, home) {
   return out;
 }
 
+const fitsSpan = (notes, sp, chord) => sp.strong.every((k) => supports(chord, pcOf(notes[k].midi), sp.mood));
+const inPalette = (mood, home, chord) => paletteFor(mood, home).some((c) => c.name === chord.name);
+
+/**
+ * Where the mood changes, make the change sound intentional. Favour a pivot: a
+ * chord on either side of the change that belongs to both moods. If the melody
+ * allows none, offer a turnaround on the old side: the V7 of a chord the new mood
+ * can start on (the bonus for actually resolving to it is in moveScore).
+ */
+function joinMoods(notes, spans, cands, home) {
+  for (let s = 1; s < spans.length; s++) {
+    const before = spans[s - 1], after = spans[s];
+    if (before.mood === after.mood) continue;
+    after.change = true;
+    let pivots = 0;
+    for (const [side, other] of [[s - 1, after.mood], [s, before.mood]]) {
+      for (const c of cands[side]) {
+        if (c.borrowed || !inPalette(other, home, c.chord)) continue;
+        c.pivot = true;
+        c.score += 0.35;
+        pivots++;
+      }
+    }
+    if (pivots) continue;
+    for (const target of cands[s].filter((c) => !c.borrowed)) {
+      const chord = chordFromRoot(home, (target.chord.root + 7) % 12, '7');
+      const have = cands[s - 1].find((c) => c.chord.name === chord.name);
+      if (have) { have.turnaround = true; continue; }
+      if (!fitsSpan(notes, before, chord)) continue;
+      cands[s - 1].push({ chord, borrowed: false, turnaround: true, score: fitScore(notes, before, chord) });
+    }
+  }
+}
+
+/** The Picardy lift: let a journey end on the major home chord, when the last notes allow it. */
+function addLift(notes, sp, list, home) {
+  const chord = chordFor(home, 'I');
+  if (!fitsSpan(notes, sp, chord)) return;
+  const i = list.findIndex((c) => c.chord.name === chord.name);
+  if (i >= 0) list.splice(i, 1);
+  list.push({ chord, borrowed: false, lift: true, score: fitScore(notes, sp, chord) + 1.5 });
+}
+
 /** The score for moving from chord a to chord b (they're different chords). */
 function moveScore(a, b, sp, final, home) {
   const r = recipeFor(sp.mood, home);
   let s = r.moves?.[`${a.base}>${b.base}`] ?? 0;
+  // A turnaround into a new mood: a dominant 7th resolving down a fifth.
+  if (sp.change && a.type === '7' && (a.root - b.root + 12) % 12 === 7) s += 0.9;
   s += 0.04 * Math.min(3, a.tones.filter((t) => b.tones.includes(t)).length); // smooth voice leading
   if (sp.mood.thirds && [3, 4, 8, 9].includes((b.root - a.root + 12) % 12)) s += sp.mood.thirds;
   if (sp.mood.heldBass && b.bass != null && b.bass === (a.bass ?? a.root)) s += sp.mood.heldBass;
@@ -330,19 +375,28 @@ function explain(notes, sp, cand, home) {
  * @param {object} [o]
  * @param {{tonic:number, mode:'major'|'minor'}} [o.home]  the home key (default: the guessed key)
  * @param {Array<{first,count,phraseEnd}>} [o.slots]  where chords may change (default: phraseSlots)
- * @param {string|string[]} [o.journey]  one mood id, or one per slot
+ * @param {string|string[]} [o.journey]  one mood id, or one per slot (see journeyFor in moods.js)
  * @param {number} [o.variations]  how many different progressions to return
- * @returns {Array<Array<{slotIndex, slots, start, end, firstIndex, noteCount, chord, roman, borrowed, why, mood, strong}>>}
+ * @param {boolean} [o.lift]  end on the major home chord if the melody allows (a journey's Picardy lift)
+ * @returns {Array<Array<{slotIndex, slots, start, end, firstIndex, noteCount, chord, roman, borrowed, clash,
+ *   pivot, turnaround, lift, why, mood, strong}>>}
  *   the variations, best first; each is the list of chords in time order
  */
-export function harmonise(notes, { home = null, slots = null, journey = 'bright', variations = 3 } = {}) {
+export function harmonise(notes, { home = null, slots = null, journey = 'bright', variations = 3, lift = false } = {}) {
   if (!notes.length) return [];
   home = home || guessKey(notes)[0];
   slots = slots || phraseSlots(notes);
   const ids = Array.isArray(journey) ? journey : [journey];
   const moods = slots.map((_, i) => moodById(ids[Math.min(i, ids.length - 1)]) || moodById('bright'));
   const spans = buildSpans(notes, slots, moods);
-  const cands = spans.map((sp, s) => candidates(notes, sp, spans.length - 1 - s, home));
+  // Ending bonuses count only inside the last mood's stretch: a Jazzy ii–V–I means
+  // nothing if the tune turns Dark before the end.
+  const lastMood = spans[spans.length - 1].mood;
+  let tail = spans.length;
+  while (tail > 0 && spans[tail - 1].mood === lastMood) tail--;
+  const cands = spans.map((sp, s) => candidates(notes, sp, s >= tail ? spans.length - 1 - s : Infinity, home));
+  joinMoods(notes, spans, cands, home);
+  if (lift) addLift(notes, spans[spans.length - 1], cands[cands.length - 1], home);
   const paths = bestPaths(cands, spans, home);
 
   // Keep variations that really differ: at least two chords (one, for very short tunes).
@@ -358,12 +412,25 @@ export function harmonise(notes, { home = null, slots = null, journey = 'bright'
   return chosen.map(({ path }) => path.map((c, s) => {
     const sp = spans[s];
     const cand = cands[s][c];
+    const next = cands[s + 1]?.[path[s + 1]];
     const first = sp.indices[0], last = sp.indices[sp.indices.length - 1];
+    // How this chord joins two moods, if it sits where they meet.
+    const join = { pivot: false, turnaround: false };
+    let why = explain(notes, sp, cand, home);
+    if (cand.pivot) {
+      const [a, b] = spans[s + 1]?.change ? [sp.mood, spans[s + 1].mood] : [spans[s - 1].mood, sp.mood];
+      join.pivot = true;
+      why += ` It belongs to both ${a.name} and ${b.name}, so the change of mood feels smooth.`;
+    } else if (cand.turnaround && next && spans[s + 1].change && (cand.chord.root - next.chord.root + 12) % 12 === 7) {
+      join.turnaround = true;
+      why += ` It leads into ${next.chord.name}, turning the music towards ${spans[s + 1].mood.name}.`;
+    }
+    if (cand.lift) why += ' Ending on the major home chord lifts the music into the light (a "Picardy third").';
     return {
       slotIndex: sp.slots[0], slots: sp.slots,
       start: notes[first].start, end: notes[last].end, firstIndex: first, noteCount: sp.indices.length,
       chord: cand.chord, roman: cand.chord.numeral, borrowed: cand.borrowed, clash: !!cand.clash,
-      why: explain(notes, sp, cand, home), mood: sp.mood.id, strong: sp.strong,
+      ...join, lift: !!cand.lift, why, mood: sp.mood.id, strong: sp.strong,
     };
   }));
 }
