@@ -140,6 +140,35 @@
         </div>
       </div>
       <div class="facts" id="facts"></div>
+      <div class="tempo-row">
+        <button type="button" class="tool" id="tempo-open" aria-controls="tempo-sheet">Set tempo…</button>
+      </div>
+      <div class="tempo-sheet" id="tempo-sheet" hidden>
+        <p class="hint">Tell the app the beat of your tune, and it writes the rhythm: note values, bars and rests. Tap along to find the BPM.</p>
+        <div class="rec-row">
+          <button type="button" class="step" id="ts-down" aria-label="Slower">−</button>
+          <input type="number" id="ts-bpm" min="40" max="240" step="1" inputmode="numeric" aria-label="Beats per minute">
+          <button type="button" class="step" id="ts-up" aria-label="Faster">+</button>
+          <span class="label">BPM</span>
+          <button type="button" class="tool" id="ts-tap">Tap the beat</button>
+        </div>
+        <div class="rec-row">
+          <div class="seg" role="group" aria-label="Beats in a bar" id="ts-sig">
+            <button type="button" data-sig="4/4" aria-pressed="true">4/4</button>
+            <button type="button" data-sig="3/4" aria-pressed="false">3/4</button>
+            <button type="button" data-sig="6/8" aria-pressed="false">6/8</button>
+          </div>
+          <div class="seg" role="group" aria-label="Where bar 1 starts" id="ts-start">
+            <button type="button" data-pickup="0" aria-pressed="true">First note is beat 1</button>
+            <button type="button" data-pickup="1" aria-pressed="false">One beat early</button>
+          </div>
+        </div>
+        <div class="rec-row">
+          <button type="button" class="primary" id="ts-apply">Write the rhythm</button>
+          <button type="button" id="ts-cancel">Cancel</button>
+          <button type="button" id="ts-clear" hidden>No tempo</button>
+        </div>
+      </div>
 
       <div class="editor">
         <div class="editor-bar">
@@ -293,6 +322,9 @@
   <button type="button" class="primary" id="play-notes" data-play="notes">▶ Notes</button>
   <button type="button" id="play-chords" data-play="chords">▶ With chords</button>
   <button type="button" id="play-hum" data-play="hum">▶ My hum</button>
+  <button type="button" class="play-click" id="play-click" aria-pressed="false" aria-label="Click the beat under playback" title="Click the beat under playback" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8l-2.5-17h-3z"/><path d="M12 15l5-9"/></svg>
+  </button>
 </div>
 <!--/APP-->
 <script type="module" src="src/app.js"></script>

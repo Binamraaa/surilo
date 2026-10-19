@@ -81,9 +81,10 @@ export function stopPlayback() {
  * @param {object} o
  * @param {'guitar'|'piano'} o.timbre
  * @param {Array<{chord:{tones:number[]}, start:number, end:number}>} [o.progression]
+ * @param {Array<{t:number, level:0|1|2}>} [o.clicks]  a metronome click at each of these times (same clock as the notes)
  * @param {(i:number|null, t:number|null)=>void} o.onTick  playing note index & time in hum-seconds
  */
-export function playNotes(notes, { timbre = 'guitar', progression = null, onTick = () => {}, onEnd = () => {} } = {}) {
+export function playNotes(notes, { timbre = 'guitar', progression = null, clicks = null, onTick = () => {}, onEnd = () => {} } = {}) {
   stopPlayback();
   if (!notes.length) return;
   const c = getCtx();
@@ -103,6 +104,20 @@ export function playNotes(notes, { timbre = 'guitar', progression = null, onTick
         { timbre: 'piano', gain: 0.16, sustain: true },
       )));
     });
+  }
+  // The beat underneath: short high blips, louder on beat 1.
+  for (const k of clicks || []) {
+    const when = t0 + k.t - offset;
+    if (when < t0 - 0.01) continue;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.frequency.value = k.level ? 1500 : 1000;
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.exponentialRampToValueAtTime([0.25, 0.35, 0.45][k.level], when + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + 0.03);
+    o.connect(g); g.connect(out);
+    o.start(when); o.stop(when + 0.04);
+    nodes.push(o);
   }
   const endAt = t0 + notes[notes.length - 1].end - offset + 0.3;
   let raf = 0;

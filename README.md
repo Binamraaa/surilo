@@ -25,8 +25,9 @@ Made for beginner and intermediate players who can hum a tune but can't yet find
 - **Key and chords.** Guesses the key with Krumhansl–Kessler key profiles, penalising keys that would make your notes "wrong", then picks a chord for each part of the melody. You can override the home note. Tap a chord to hear it and see why it fits ("Your E is the 3rd of C").
 - **Moods.** Hum once, then hear the same tune as Bright, Bittersweet, Dark, Hopeful minor, Bluesy, Dreamy, Epic, Jazzy or Floating. A mood never changes a note: it only changes the chords underneath. Each mood is a recipe (which chords, which moves between them, which colour notes, how it ends, how often the chords change), and a small search (a k-best Viterbi) finds the progression that fits your melody best, plus other versions to try. Every chord supports the important notes over it, or is marked as borrowed from outside the mood.
 - **Mood journeys.** Change mood partway through: presets like Bright → Dark, or Dark → Hopeful (which ends on a major chord, the "Picardy third"), or tap any part of the mood strip to set its mood yourself. Where the mood changes, the app looks for a chord both moods share, or leads in with a V7, so the change sounds intentional.
-- **Playback.** Plays the notes, the notes with the chosen chords (the keyboard follows along), or your original hum, so you can compare by ear.
-- **MIDI export.** Saves the melody and chords as a `.mid` file you can drop into Reaper or any DAW.
+- **Playback.** Plays the notes, the notes with the chosen chords (the keyboard follows along), or your original hum, so you can compare by ear. With a beat, the notes play as written at the tempo, with an optional click.
+- **MIDI export.** Saves the melody and chords as a `.mid` file you can drop into Reaper or any DAW. With a beat, the file carries the tempo and time signature and every note sits on the grid, so it lands in your DAW ready to use.
+- **Set tempo.** For an uploaded voice memo (or to change a hum's beat): type or tap the BPM, pick 4/4, 3/4 or 6/8, and say whether the tune starts on beat 1 or a beat early. The samples come with their own beat, so the rhythm shows straight away.
 - **Input options.** Works with the mic, with an uploaded voice memo, or with the built-in sample hums.
 
 Everything runs in the browser. No audio leaves your device.

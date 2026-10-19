@@ -260,7 +260,7 @@ function sitsWell(sig, pos, len) {
  * 3. Notes and the rests between them are split into values you can write: at bar
  *    lines, and at the middle of a 4/4 bar (or between the two dotted-quarter groups of
  *    a 6/8 bar) unless the note starts the bar and fills it out; the pieces are tied.
- *    A silent bar is one whole-bar rest.
+ *    A silent bar is one whole-bar rest. A pickup bar (before bar 1) gets no rests in front.
  *
  * @param {Array<{start:number, end:number}>} notes  in seconds, in time order
  * @param {{sig:string, beatAt:(t:number)=>number}} tempo  beatAt: seconds → beats (0 = bar 1 beat 1)
@@ -317,7 +317,8 @@ export function quantize(notes, { sig = '4/4', beatAt }) {
   const firstBar = Math.floor(on[0] / barLen);
   const lastBar = Math.floor((off[off.length - 1] - 1) / barLen);
   const rests = [];
-  let cursor = firstBar * barLen;
+  // A tune that starts before bar 1 (a pickup) is written without rests in front of it.
+  let cursor = firstBar < 0 ? on[0] : firstBar * barLen;
   const timed = notes.map((_, i) => {
     if (on[i] > cursor) rests.push(...split(cursor, on[i], true));
     cursor = off[i];

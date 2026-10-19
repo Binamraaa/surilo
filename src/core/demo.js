@@ -27,6 +27,17 @@ export const DEMO_MELODIES = {
   ],
 };
 
+/**
+ * How each sample is written: its time signature, and how many beats come before
+ * bar 1 (a pickup). Greensleeves and Für Elise both start on the beat before bar 1.
+ */
+export const DEMO_TIMING = {
+  'Ode to Joy': { sig: '4/4', pickup: 0 },
+  'Twinkle Twinkle': { sig: '4/4', pickup: 0 },
+  'Greensleeves (minor)': { sig: '3/4', pickup: 1 },
+  'Für Elise': { sig: '3/4', pickup: 1 },
+};
+
 /** Simple seeded PRNG so demos and tests are reproducible. */
 function rng(seed = 1) {
   let s = seed >>> 0;

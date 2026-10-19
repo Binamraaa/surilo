@@ -4,7 +4,7 @@ import { analyseBuffer, levelStats } from './core/pitch.js';
 import { midiToName, centsOff } from './core/notes.js';
 import { transcribe } from './core/intent.js';
 import { guessKey, keyName, keyUsesFlats, phraseSlots, fingerMelody, chordsWithNote, voiceChord } from './core/theory.js';
-import { synthHum, DEMO_MELODIES } from './core/demo.js';
+import { synthHum, DEMO_MELODIES, DEMO_TIMING } from './core/demo.js';
 import { toMidiFile } from './core/midi.js';
 import {
   withIds, transpose, reshape, deleteNote, addNote, splitNote, mergeWithNext, resolveGuess, indexOfId, createHistory,
@@ -16,7 +16,7 @@ import { createRoll } from './ui/roll.js';
 import { createMetronomePanel } from './ui/metronome-panel.js';
 import { createRecordSetup } from './ui/record-setup.js';
 import { createMetronome } from './audio/metronome.js';
-import { trackTempo, secondsPerBeat, beatsPerBar, quantize, stepsPerBeat } from './core/rhythm.js';
+import { trackTempo, secondsPerBeat, beatsPerBar, quantize, stepsPerBeat, accentLevel, tapTempo, clampBpm, TAP_RESET_MS } from './core/rhythm.js';
 import { testModeOn, turnOffTestMode, testHumFile, shareOrDownload } from './ui/test-mode.js';
 import { harmonise, paletteFor } from './core/harmony.js';
 import { MOODS, moodById, JOURNEYS, journeyById, journeyFor } from './core/moods.js';
@@ -50,6 +50,8 @@ const state = {
   take: null,        // while humming to a count-in: {m (metronome), bpm, sig, mode, countIn}
   rhythm: null,      // the notes as note values (quantize), when the hum has a beat
   snap: true,        // with a beat, drags in the roll jump from eighth to eighth
+  playClick: false,  // with a beat, a click under playback
+  playMap: null,     // while playing on the grid: playback seconds → hum seconds (for the playhead)
   countingIn: false,
   octave: 0,
   instrument: 'guitar',
@@ -76,16 +78,19 @@ const state = {
 
 // ---------- Analysis ----------
 
+/**
+ * Where each note sits in the bar: follow the singer's tempo through the notes,
+ * from bar 1 at `tempo.origin` (s). beatAt / secondsAt use the recording's own seconds.
+ */
+function followTempo(tempo, notes) {
+  const map = trackTempo(notes.map((n) => n.start - tempo.origin), { bpm: tempo.bpm, sig: tempo.sig, limit: tempo.mode === 'throughout' ? 0.03 : 0.12 });
+  return { ...tempo, ...map, beatAt: (t) => map.beatAt(t - tempo.origin), secondsAt: (b) => tempo.origin + map.secondsAt(b) };
+}
+
 function setAnalysis({ frames, recording, mask = null, tempo = null }) {
   const { notes, tuning } = transcribe(frames, { trust: state.trust, mask });
   // Hummed to a beat: where each note sits in the bar, following the singer's own tempo.
-  if (tempo) {
-    const map = trackTempo(notes.map((n) => n.start - tempo.origin), { bpm: tempo.bpm, sig: tempo.sig, limit: tempo.mode === 'throughout' ? 0.03 : 0.12 });
-    // beatAt / secondsAt in the recording's own seconds, like the notes.
-    state.tempo = { ...tempo, ...map, beatAt: (t) => map.beatAt(t - tempo.origin), secondsAt: (b) => tempo.origin + map.secondsAt(b) };
-  } else {
-    state.tempo = null;
-  }
+  state.tempo = tempo ? followTempo(tempo, notes) : null;
   if (state.tempo) {
     const { bpm, sig, mode, countIn, origin, offset, drift } = state.tempo;
     state.recTempo = { bpm, sig, mode, countIn, origin, offset, drift };
@@ -159,6 +164,9 @@ function renderRoll() {
     beatLines: beatLines(), snap: state.tempo && state.snap ? snapTime : null,
   });
   $('ed-snap').hidden = !state.tempo;
+  $('play-click').hidden = !state.rhythm;
+  $('tempo-open').textContent = state.tempo ? 'Change tempo…' : 'Set tempo…';
+  $('tempo-open').hidden = !state.notes.length;
   $('ed-snap').setAttribute('aria-pressed', String(state.snap));
   const sel = state.selected != null;
   for (const id of ['ed-up', 'ed-down', 'ed-oct-up', 'ed-oct-down', 'ed-split', 'ed-delete', 'ed-shorter', 'ed-longer']) $(id).disabled = !sel;
@@ -751,7 +759,7 @@ function analyseRecording(rec, label, { quiet = false } = {}) {
     const frames = analyseBuffer(rec.samples, rec.sampleRate);
     const tempo = rec.tempo || null;
     let mask = null;
-    if (tempo) {
+    if (tempo && (tempo.mode === 'countin' || tempo.mode === 'throughout')) {
       if (rec.samples.length / rec.sampleRate < tempo.origin + 0.2) {
         setStatus('You stopped during the count-in. Press Start humming, wait for the clicks, then hum from beat 1.', true);
         return;
@@ -828,6 +836,9 @@ function loadSample(name, { quiet = false } = {}) {
   if (!DEMO_MELODIES[name]) return;
   stopPlayback();
   const rec = synthHum(DEMO_MELODIES[name]);
+  // Samples are made at 100 BPM, so they come with their beat (and any pickup before bar 1).
+  const { sig, pickup } = DEMO_TIMING[name];
+  rec.tempo = { bpm: 100, sig, mode: 'sample', origin: 0.4 + pickup * secondsPerBeat(100, sig), clicks: [] };
   $('mode-label').textContent = `Sample · ${name}`;
   Object.assign(state, { source: 'sample', micLabel: null, recTempo: null });
   analyseRecording(rec, `the "${name}" sample`, { quiet });
@@ -842,21 +853,48 @@ const tick = (i, t) => {
     else if (t == null && state.playingProg) { state.chordTones = []; state.playingProg = null; }
     renderActive();
   }
-  state.playhead = t;
+  // Played on the grid: show the playhead where that moment is in your hum.
+  state.playhead = t != null && state.playMap ? state.playMap(t) : t;
   renderTrace();
-  roll.playhead(t);
+  roll.playhead(state.playhead);
 };
+
+/**
+ * What to play. With a beat, the notes as written: on the grid at a steady tempo
+ * (tied pieces as one note), the chords with them, and the click if it's on.
+ */
+function playable(progression) {
+  const r = state.rhythm, t = state.tempo;
+  if (!r) return { notes: state.notes, progression, clicks: null, toHum: null };
+  const per = stepsPerBeat(t.sig);
+  const eighth = secondsPerBeat(t.bpm, t.sig) / per;
+  const at = (e) => e * eighth;
+  const last = r.notes[r.notes.length - 1];
+  const notes = state.notes.map((n, i) => ({ ...n, start: at(r.notes[i].e), end: at(r.notes[i].e + r.notes[i].len) - 0.03 }));
+  const prog = progression && progression.map((p) => ({ ...p, start: at(r.notes[p.firstIndex].e), end: at(last.e + last.len) }));
+  let clicks = null;
+  if (state.playClick) {
+    clicks = [];
+    const bpb = beatsPerBar(t.sig);
+    for (let b = Math.floor(r.notes[0].e / per); b * per < last.e + last.len; b++) {
+      clicks.push({ t: at(b * per), level: accentLevel(((b % bpb) + bpb) % bpb, t.sig) });
+    }
+  }
+  return { notes, progression: prog, clicks, toHum: (x) => t.secondsAt(x / eighth / per) };
+}
 
 /** Play the notes, with a progression underneath (or none). */
 function playMelody(progression = null, kind = progression ? 'chords' : 'notes') {
+  const p = playable(progression);
   // Starting stops whatever was playing, and that resets the bar, so mark the new one after.
-  playNotes(state.notes, { timbre: state.instrument, progression, onTick: tick, onEnd: () => setPlaying(null) });
+  playNotes(p.notes, { timbre: state.instrument, progression: p.progression, clicks: p.clicks, onTick: tick, onEnd: () => setPlaying(null) });
   state.playingProg = progression;
+  state.playMap = p.toHum;
   setPlaying(kind);
 }
 
 async function saveMidi() {
-  const bytes = toMidiFile(state.notes, state.progression);
+  const bytes = toMidiFile(state.notes, state.progression, { rhythm: state.rhythm, tempo: state.tempo });
   const blob = new Blob([bytes], { type: 'audio/midi' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -864,7 +902,9 @@ async function saveMidi() {
   document.body.append(a);
   a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-  setStatus('Saved a MIDI file with the melody and chords. Drag it into Reaper or any DAW.');
+  setStatus(state.rhythm
+    ? `Saved a MIDI file at ${state.tempo.bpm} BPM in ${state.tempo.sig}, with the melody and chords on the grid. Drag it into your music software.`
+    : 'Saved a MIDI file with the melody and chords. Drag it into Reaper or any DAW.');
 }
 
 async function saveTestHum() {
@@ -886,6 +926,61 @@ async function saveTestHum() {
     downloaded: `Downloaded ${file.name} (${mb} MB). Move it to the "Hum to Notes tests" folder in Drive.`,
     cancelled: 'Not saved.',
   }[how]);
+}
+
+// ---------- Set tempo (uploads, samples, or to change a hum's beat) ----------
+
+/** The sheet under the facts: a BPM (typed, stepped or tapped), a time signature, and where bar 1 starts. */
+function initTempoSheet() {
+  const sheet = $('tempo-sheet');
+  let sig = '4/4', pickup = 0, taps = [];
+  const bpmIn = $('ts-bpm');
+  const draw = () => {
+    document.querySelectorAll('#ts-sig [data-sig]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.sig === sig)));
+    document.querySelectorAll('#ts-start [data-pickup]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.pickup) === pickup)));
+    $('ts-clear').hidden = !state.tempo;
+  };
+  const setBpm = (v) => { bpmIn.value = clampBpm(Number(v) || 90); };
+  $('tempo-open').addEventListener('click', () => {
+    sheet.hidden = !sheet.hidden;
+    if (sheet.hidden) return;
+    setBpm(state.tempo?.bpm ?? metro.bpm);
+    sig = state.tempo?.sig ?? metro.sig;
+    pickup = 0;
+    taps = [];
+    draw();
+  });
+  $('ts-down').addEventListener('click', () => setBpm(Number(bpmIn.value) - 1));
+  $('ts-up').addEventListener('click', () => setBpm(Number(bpmIn.value) + 1));
+  bpmIn.addEventListener('change', () => setBpm(bpmIn.value));
+  $('ts-tap').addEventListener('click', () => {
+    const t = performance.now();
+    if (taps.length && t - taps[taps.length - 1] > TAP_RESET_MS) taps = [];
+    taps = [...taps.slice(-7), t];
+    const bpm = tapTempo(taps);
+    if (bpm) setBpm(bpm);
+    $('ts-tap').textContent = bpm ? `Tap again · ${bpm}` : 'Keep tapping…';
+  });
+  $('ts-sig').addEventListener('click', (e) => { const b = e.target.closest('[data-sig]'); if (b) { sig = b.dataset.sig; draw(); } });
+  $('ts-start').addEventListener('click', (e) => { const b = e.target.closest('[data-pickup]'); if (b) { pickup = Number(b.dataset.pickup); draw(); } });
+  $('ts-cancel').addEventListener('click', () => { sheet.hidden = true; $('ts-tap').textContent = 'Tap the beat'; });
+  $('ts-clear').addEventListener('click', () => {
+    state.tempo = null;
+    sheet.hidden = true;
+    derive(); renderAll();
+    setStatus('No tempo: the notes keep their timing as hummed.');
+  });
+  $('ts-apply').addEventListener('click', () => {
+    if (!state.detected.length) return;
+    const bpm = clampBpm(Number(bpmIn.value) || 90);
+    // Bar 1 starts on the first note, or one beat after it for a pickup.
+    const origin = state.detected[0].start + pickup * secondsPerBeat(bpm, sig);
+    state.tempo = followTempo({ bpm, sig, mode: 'set', origin, clicks: [] }, state.detected);
+    sheet.hidden = true;
+    $('ts-tap').textContent = 'Tap the beat';
+    derive(); renderAll();
+    setStatus(`Rhythm written at ${bpm} BPM in ${sig}. Check the staff on the Play tab.${timingNote()}`);
+  });
 }
 
 // ---------- Editing ----------
@@ -991,6 +1086,12 @@ function init() {
   $('ed-next').addEventListener('click', () => step(1));
   $('ed-done').addEventListener('click', () => { state.selected = null; renderRoll(); renderBlocks(); renderInstrument(); renderNoteChords(); });
   $('zoom-in').addEventListener('click', () => roll.zoom(1.5));
+  initTempoSheet();
+  $('play-click').addEventListener('click', () => {
+    state.playClick = !state.playClick;
+    $('play-click').setAttribute('aria-pressed', String(state.playClick));
+    setStatus(state.playClick ? 'The beat clicks under playback.' : 'No click under playback.');
+  });
   $('ed-snap').addEventListener('click', () => {
     state.snap = !state.snap;
     renderRoll();
@@ -1019,6 +1120,7 @@ function init() {
   playButton('hum', () => {
     if (!state.recording) return;
     playRecording(state.recording, { onTick: tick, onEnd: () => setPlaying(null) });
+    state.playMap = null;
     setPlaying('hum');
   });
   $('tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (b) showView(b.dataset.view); });
