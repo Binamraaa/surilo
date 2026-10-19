@@ -12,21 +12,34 @@ const nameParts = (midi, flats) => {
 
 // ---------------- Note blocks ----------------
 
-export function blocksView({ notes, fingering, chordsAt, flats, instrument, active, selected }) {
+const NOTE_GLYPH = { whole: '𝅝', half: '𝅗𝅥', quarter: '♩', eighth: '♪' };
+const NOTE_WORD = { whole: 'whole note', half: 'half note', quarter: 'quarter note', eighth: 'eighth note' };
+/** "♩." / "♩‿♪" and "dotted quarter note" / "quarter note tied to an eighth note". */
+export function valueLabel(pieces) {
+  const glyph = pieces.map((p) => NOTE_GLYPH[p.value.base] + (p.value.dots ? '.' : '')).join('‿');
+  const words = pieces.map((p) => (p.value.dots ? 'dotted ' : '') + NOTE_WORD[p.value.base]).join(' tied to ');
+  return { glyph, words };
+}
+
+export function blocksView({ notes, fingering, chordsAt, flats, instrument, active, selected, rhythm = null }) {
   if (!notes.length) return `<div class="empty">No notes yet. Hum something, upload a voice memo, or try a sample.</div>`;
   return notes.map((n, i) => {
     const { letter, octave } = nameParts(n.midi, flats);
     const dur = n.end - n.start;
-    const w = Math.round(Math.max(62, Math.min(150, 50 + dur * 60)));
+    const t = rhythm?.notes[i];
+    // With a beat, a block's width follows its length in beats (one eighth = 16 px).
+    const w = t ? Math.round(Math.max(62, Math.min(190, 30 + t.len * 16))) : Math.round(Math.max(62, Math.min(150, 50 + dur * 60)));
+    const val = t ? valueLabel(t.pieces) : null;
     const f = fingering[i];
     const sub = instrument === 'guitar' && f
       ? `${STRING_NAMES[f.string]} string<br>${f.fret === 0 ? 'open' : 'fret ' + f.fret}`
-      : `${dur.toFixed(2)} s`;
+      : val ? val.words.replace(' note', '').replace(' tied to ', ' + ') : `${dur.toFixed(2)} s`;
     const chord = chordsAt.get(i);
     const off = !n.edited && Math.abs(n.cents) >= 20 ? `<span class="off" title="You hummed ${Math.abs(n.cents)} cents ${n.cents > 0 ? 'sharp' : 'flat'}">${n.cents > 0 ? '+' : '−'}${Math.abs(n.cents)}¢</span>` : '';
     const cls = ['block', i === active ? 'active' : '', i === selected ? 'sel' : '', n.adjusted ? 'guess' : ''].join(' ');
     const guess = n.adjusted ? `<span class="guess-mark" title="You hummed between two notes; this is the one that fits the tune">≈</span>` : '';
-    return `<div class="${cls}" data-i="${i}" role="button" tabindex="0" style="width:${w}px" aria-label="Note ${i + 1}: ${letter}${octave}${n.adjusted ? ', best guess' : ''}">${guess}
+    const valTag = val ? `<span class="val" title="${val.words}">${val.glyph}</span>` : '';
+    return `<div class="${cls}" data-i="${i}" role="button" tabindex="0" style="width:${w}px" aria-label="Note ${i + 1}: ${letter}${octave}${val ? `, ${val.words}` : ''}${n.adjusted ? ', best guess' : ''}">${guess}${valTag}
       ${chord ? `<span class="chord">${esc(chord.name)}</span>` : ''}
       <span class="n">${letter}<sub>${octave}</sub></span><span class="f">${sub}</span>${off}</div>`;
   }).join('');
@@ -172,6 +185,161 @@ export function staffView({ notes, flats, instrument, chordsAt, active, selected
     if (chord) g += `<text x="${cx - 6}" y="16" font-size="13" font-weight="700" style="fill:var(--warm)">${esc(chord.name)}</text>`;
   });
   return `<svg class="staff" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Notes on a ${bass ? 'bass' : 'treble'} staff">${g}</svg>`;
+}
+
+/**
+ * The staff with real rhythm, for a hum with a beat: time signature, bar lines,
+ * note values (hollow heads for halves and wholes, flags or beams for eighths,
+ * dots, ties across beats and bar lines) and rests. Wraps onto new lines to fit
+ * `width`, a few bars per line.
+ */
+export function rhythmStaffView({ notes, rhythm, flats, instrument, chordsAt, active, selected, width = 860 }) {
+  if (!notes.length || !rhythm) return '';
+  const { sig, barLen, bars } = rhythm;
+  const written = instrument === 'guitar' ? notes.map((n) => n.midi + 12) : notes.map((n) => n.midi);
+  const sorted = [...written].sort((a, b) => a - b);
+  const bass = instrument !== 'guitar' && sorted[sorted.length >> 1] < 57;
+  const bottomStep = bass ? 18 : 30;
+  const gap = 10, top = 46;
+  const EW = 24;                          // px per eighth note
+  const barW = 18 + barLen * EW;          // room after the bar line, then the notes
+  const clefW = 50, sigW = 26;
+  const perLine = Math.max(1, Math.floor((width - clefW - sigW - 16) / barW));
+  const lines = Math.ceil(bars.count / perLine);
+  const lineH = top + gap * 4 + 74;
+  const lineW = (k) => clefW + (k === 0 ? sigW : 0) + Math.min(perLine, bars.count - k * perLine) * barW;
+  const W = Math.max(...Array.from({ length: lines }, (_, k) => lineW(k))) + 12;
+  const H = lines * lineH;
+
+  const barOf = (e) => Math.floor(e / barLen) - bars.first;
+  const place = (e) => {
+    const b = barOf(e);
+    const line = Math.floor(b / perLine);
+    const pos = e - Math.floor(e / barLen) * barLen;
+    return { line, x: clefW + (line === 0 ? sigW : 0) + (b % perLine) * barW + 22 + pos * EW };
+  };
+  const yOf = (line, step) => line * lineH + top + gap * 4 - (step - bottomStep) * (gap / 2);
+  const middle = bottomStep + 4;
+
+  let g = '';
+  // Staff lines, clef, time signature, bar lines, bar numbers.
+  for (let k = 0; k < lines; k++) {
+    const y0 = k * lineH, x1 = lineW(k);
+    for (let l = 0; l < 5; l++) g += `<line x1="8" x2="${x1}" y1="${y0 + top + l * gap}" y2="${y0 + top + l * gap}" style="stroke:var(--ink-soft)" stroke-width="1"/>`;
+    g += bass
+      ? `<text x="12" y="${y0 + top + gap * 2 + 2}" font-size="38" style="fill:var(--ink);font-family:var(--font-music)">𝄢</text>`
+      : `<text x="10" y="${y0 + top + gap * 4 + 10}" font-size="46" style="fill:var(--ink);font-family:var(--font-music)">𝄞</text>`;
+    if (instrument === 'guitar') g += `<text x="24" y="${y0 + top + gap * 4 + 30}" font-size="11" font-weight="700" style="fill:var(--ink)">8</text>`;
+    if (k === 0) {
+      const [num, den] = sig.split('/');
+      for (const [t, dy] of [[num, gap * 2 - 1], [den, gap * 4 - 1]]) {
+        g += `<text x="${clefW + 4}" y="${y0 + top + dy}" font-size="21" font-weight="700" style="fill:var(--ink);font-family:var(--font-display)">${t}</text>`;
+      }
+    }
+    const firstBar = k * perLine;
+    const n = Math.min(perLine, bars.count - firstBar);
+    const x0 = clefW + (k === 0 ? sigW : 0);
+    for (let b = 1; b <= n; b++) {
+      const x = x0 + b * barW;
+      const last = firstBar + b === bars.count;
+      g += `<line x1="${x}" x2="${x}" y1="${y0 + top}" y2="${y0 + top + gap * 4}" style="stroke:var(--ink)" stroke-width="${last ? 3 : 1.2}"/>`;
+    }
+    const barNo = bars.first + firstBar + 1;
+    if (barNo >= 1) g += `<text x="${x0 + 2}" y="${y0 + top - 8}" font-size="10" style="fill:var(--ink-soft)">${barNo}</text>`;
+  }
+
+  // Every piece of every note, in time order, with where it's drawn.
+  const focus = active ?? selected;
+  const items = [];
+  rhythm.notes.forEach((t, i) => t.pieces.forEach((p, k) => {
+    const { step, accidental } = staffSpelling(written[i], flats);
+    const pl = place(p.e);
+    items.push({ ...p, i, k, step, accidental: k === 0 ? accidental : '', ...pl, cy: yOf(pl.line, step) });
+  }));
+
+  // Beams: eighths side by side within one beat (one dotted quarter in 6/8).
+  const group = sig === '6/8' ? 3 : 2;
+  const plain = (p) => p.value.base === 'eighth' && !p.value.dots;
+  const beamOf = new Map();
+  for (let j = 0; j < items.length; j++) {
+    const a = items[j];
+    if (!plain(a)) continue;
+    const run = [a];
+    const gid = Math.floor(a.e / group);
+    while (j + 1 < items.length) {
+      const b = items[j + 1];
+      if (!plain(b) || b.e !== run[run.length - 1].e + 1 || Math.floor(b.e / group) !== gid || barOf(b.e) !== barOf(a.e)) break;
+      run.push(b);
+      j++;
+    }
+    if (run.length < 2) continue;
+    const up = run.reduce((s, p) => s + p.step, 0) / run.length < middle;
+    const end = up ? Math.min(...run.map((p) => p.cy)) - 28 : Math.max(...run.map((p) => p.cy)) + 28;
+    for (const p of run) beamOf.set(p, { up, end });
+    const xs = run.map((p) => (up ? p.x + 5.8 : p.x - 5.8));
+    g += `<line x1="${xs[0]}" x2="${xs[xs.length - 1]}" y1="${end}" y2="${end}" style="stroke:var(--ink)" stroke-width="4"/>`;
+  }
+
+  items.forEach((p, j) => {
+    const { x: cx, cy, step, line, i } = p;
+    const on = i === focus;
+    const color = on ? 'var(--accent)' : 'var(--ink)';
+    if (step < bottomStep - 1) for (let s = bottomStep - 2; s >= step; s -= 2) g += `<line x1="${cx - 11}" x2="${cx + 11}" y1="${yOf(line, s)}" y2="${yOf(line, s)}" style="stroke:var(--ink-soft)"/>`;
+    if (step > bottomStep + 9) for (let s = bottomStep + 10; s <= step; s += 2) g += `<line x1="${cx - 11}" x2="${cx + 11}" y1="${yOf(line, s)}" y2="${yOf(line, s)}" style="stroke:var(--ink-soft)"/>`;
+    if (p.accidental) g += `<text x="${cx - 19}" y="${cy + 5}" font-size="15" style="fill:${color}">${p.accidental}</text>`;
+    const hollow = p.value.base === 'half' || p.value.base === 'whole';
+    g += `<ellipse cx="${cx}" cy="${cy}" rx="6.4" ry="4.6" transform="rotate(-20 ${cx} ${cy})" style="fill:${hollow ? 'none' : color};stroke:${color}" stroke-width="${hollow ? 1.8 : 0}"/>`;
+    // A dot sits in a space: on a line note it moves up half a space.
+    if (p.value.dots) g += `<circle cx="${cx + 11}" cy="${(step - bottomStep) % 2 === 0 ? cy - gap / 2 : cy}" r="1.9" style="fill:${color}"/>`;
+    if (p.value.base !== 'whole') {
+      const beam = beamOf.get(p);
+      const up = beam ? beam.up : step < middle;
+      const sx = up ? cx + 5.8 : cx - 5.8;
+      const sy = beam ? beam.end : up ? cy - 30 : cy + 30;
+      g += `<line x1="${sx}" x2="${sx}" y1="${cy}" y2="${sy}" style="stroke:${color}" stroke-width="1.3"/>`;
+      if (p.value.base === 'eighth' && !beam) {
+        g += up
+          ? `<path d="M${sx} ${sy} q 2 7 8 10 q 3 3 1 9" fill="none" style="stroke:${color}" stroke-width="1.6"/>`
+          : `<path d="M${sx} ${sy} q 2 -7 8 -10 q 3 -3 1 -9" fill="none" style="stroke:${color}" stroke-width="1.6"/>`;
+      }
+    }
+    // A tie curves to the next piece of the same note (or off the end of the line).
+    if (p.tie) {
+      const next = items[j + 1];
+      const side = step >= middle ? -1 : 1; // away from the stems
+      const x2 = next && next.line === line ? next.x - 6 : lineW(line) - 4;
+      const ty = cy + side * 7;
+      g += `<path d="M${cx + 6} ${ty} Q ${(cx + x2) / 2} ${ty + side * 9} ${x2} ${ty}" fill="none" style="stroke:${color}" stroke-width="1.4"/>`;
+    }
+    if (p.k === 0) {
+      const { letter } = nameParts(notes[i].midi, flats);
+      g += `<text x="${cx}" y="${line * lineH + lineH - 10}" text-anchor="middle" font-size="11" font-weight="${on ? 700 : 400}" style="fill:${on ? 'var(--accent)' : 'var(--ink-soft)'}">${letter}</text>`;
+      const chord = chordsAt.get(i);
+      if (chord) g += `<text x="${cx - 6}" y="${line * lineH + 16}" font-size="13" font-weight="700" style="fill:var(--warm)">${esc(chord.name)}</text>`;
+    }
+  });
+
+  // Rests, on the middle of the staff.
+  const REST = { quarter: '𝄽', eighth: '𝄾' };
+  for (const r of rhythm.rests) {
+    const pl = place(r.e);
+    const mid = yOf(pl.line, middle);
+    if (r.bar || r.value.base === 'whole') {
+      // A whole-bar rest hangs from the 4th line, in the middle of the bar.
+      const x = pl.x + (barLen * EW) / 2 - 14;
+      g += `<rect x="${x}" y="${yOf(pl.line, bottomStep + 6)}" width="14" height="${gap / 2}" style="fill:var(--ink-soft)"/>`;
+      continue;
+    }
+    if (r.value.base === 'half') {
+      // A half rest sits on the middle line.
+      g += `<rect x="${pl.x - 7}" y="${mid - gap / 2}" width="14" height="${gap / 2}" style="fill:var(--ink-soft)"/>`;
+    } else {
+      g += `<text x="${pl.x}" y="${mid + (r.value.base === 'quarter' ? 10 : 6)}" text-anchor="middle" font-size="${r.value.base === 'quarter' ? 30 : 26}" style="fill:var(--ink-soft);font-family:var(--font-music)">${REST[r.value.base]}</text>`;
+    }
+    if (r.value.dots) g += `<circle cx="${pl.x + 10}" cy="${mid - gap / 2}" r="1.9" style="fill:var(--ink-soft)"/>`;
+  }
+
+  return `<svg class="staff" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Notes on a ${bass ? 'bass' : 'treble'} staff in ${sig}, ${bars.count} bar${bars.count === 1 ? '' : 's'}">${g}</svg>`;
 }
 
 // ---------------- Pitch trace (canvas) ----------------

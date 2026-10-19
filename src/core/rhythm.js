@@ -227,3 +227,110 @@ export function trackTempo(onsets, { bpm, sig = '4/4', limit = 0.12 } = {}) {
     bars: knots.length ? (knots[knots.length - 1].k - knots[0].k) / (sub * beatsPerBar(sig)) : 0,
   };
 }
+
+// ---------- Note values ----------
+
+// Lengths in eighth notes, and how each is written.
+const VALUE_OF = {
+  8: { base: 'whole', dots: 0 }, 6: { base: 'half', dots: 1 }, 4: { base: 'half', dots: 0 },
+  3: { base: 'quarter', dots: 1 }, 2: { base: 'quarter', dots: 0 }, 1: { base: 'eighth', dots: 0 },
+};
+// Which lengths each time signature writes, longest first.
+const LENGTHS = { '4/4': [8, 6, 4, 3, 2, 1], '3/4': [6, 4, 3, 2, 1], '6/8': [6, 3, 2, 1] };
+
+/** Can a note of `len` eighths start `pos` eighths into the bar and still be easy to read? */
+function sitsWell(sig, pos, len) {
+  if (len === 1) return true;
+  if (sig === '6/8') {
+    if (len === 6) return pos === 0;
+    if (len === 3) return pos % 3 === 0;
+    return pos % 3 <= 1; // a quarter stays inside its dotted-quarter group
+  }
+  if (len >= 6) return pos === 0;
+  if (len === 4) return sig === '4/4' ? pos % 4 === 0 : pos % 2 === 0;
+  return pos % 2 === 0; // quarters and dotted quarters start on a beat
+}
+
+/**
+ * Snap notes to the beat and write them as note values, ties and rests.
+ *
+ * 1. Each start goes to the nearest eighth; two notes never share one (the later moves on).
+ * 2. Each end goes to the nearest eighth, at least an eighth after the start. A gap of
+ *    less than an eighth before the next note closes up (hummed notes are legato).
+ * 3. Notes and the rests between them are split into values you can write: at bar
+ *    lines, and at the middle of a 4/4 bar (or between the two dotted-quarter groups of
+ *    a 6/8 bar) unless the note starts the bar and fills it out; the pieces are tied.
+ *    A silent bar is one whole-bar rest.
+ *
+ * @param {Array<{start:number, end:number}>} notes  in seconds, in time order
+ * @param {{sig:string, beatAt:(t:number)=>number}} tempo  beatAt: seconds → beats (0 = bar 1 beat 1)
+ * @returns {{sig:string, per:number, barLen:number, bars:{first:number, count:number},
+ *   notes: Array<{beat:number, beats:number, e:number, len:number, pieces:Array<{e, len, beat, beats, value:{base, dots}, tie:boolean}>}>,
+ *   rests: Array<{e, len, beat, beats, value:{base, dots}, bar?:boolean}>} | null}
+ *   e / len: position and length in eighth notes; beat / beats: the same in beats
+ */
+export function quantize(notes, { sig = '4/4', beatAt }) {
+  if (!notes.length) return null;
+  const per = stepsPerBeat(sig);               // eighths per beat
+  const barLen = beatsPerBar(sig) * per;      // eighths per bar: 8, 6 or 6
+  const mid = sig === '4/4' ? 4 : sig === '6/8' ? 3 : null;
+
+  const on = [];
+  notes.forEach((n, i) => {
+    let e = Math.round(beatAt(n.start) * per) + 0; // + 0: never -0
+    if (i && e <= on[i - 1]) e = on[i - 1] + 1;
+    on.push(e);
+  });
+  const off = notes.map((n, i) => {
+    const raw = beatAt(n.end) * per;
+    let e = Math.max(Math.round(raw), on[i] + 1);
+    const next = on[i + 1];
+    if (next != null) {
+      if (next - raw < 1) e = next; // legato
+      e = Math.min(e, next);
+    }
+    return e;
+  });
+
+  const split = (a, b, rest) => {
+    const out = [];
+    for (let x = a; x < b;) {
+      const barStart = Math.floor(x / barLen) * barLen;
+      const pos = x - barStart;
+      let stop = Math.min(b, barStart + barLen);
+      if (rest && pos === 0 && stop - x === barLen) {
+        out.push({ e: x, len: barLen, value: { base: 'whole', dots: 0 }, bar: true });
+        x = stop;
+        continue;
+      }
+      if (mid != null && pos < mid && stop > barStart + mid) {
+        const fills = !rest && pos === 0 && (stop - x === barLen || (sig === '4/4' && stop - x === 6));
+        if (!fills) stop = barStart + mid;
+      }
+      const len = LENGTHS[sig].find((l) => l <= stop - x && sitsWell(sig, pos, l));
+      out.push({ e: x, len, value: VALUE_OF[len] });
+      x += len;
+    }
+    return out.map((p) => ({ ...p, beat: p.e / per, beats: p.len / per }));
+  };
+
+  const firstBar = Math.floor(on[0] / barLen);
+  const lastBar = Math.floor((off[off.length - 1] - 1) / barLen);
+  const rests = [];
+  let cursor = firstBar * barLen;
+  const timed = notes.map((_, i) => {
+    if (on[i] > cursor) rests.push(...split(cursor, on[i], true));
+    cursor = off[i];
+    const pieces = split(on[i], off[i], false);
+    pieces.forEach((p, k) => { p.tie = k < pieces.length - 1; });
+    return { e: on[i], len: off[i] - on[i], beat: on[i] / per, beats: (off[i] - on[i]) / per, pieces };
+  });
+  if (cursor < (lastBar + 1) * barLen) rests.push(...split(cursor, (lastBar + 1) * barLen, true));
+  return { sig, per, barLen, bars: { first: firstBar, count: lastBar - firstBar + 1 }, notes: timed, rests };
+}
+
+/** A straight beat map for a steady tempo: bar 1 beat 1 at `origin` seconds. */
+export function steadyTempo({ bpm, sig = '4/4', origin = 0 }) {
+  const spb = secondsPerBeat(bpm, sig);
+  return { bpm, sig, origin, offset: 0, drift: 0, bpmStart: bpm, bpmEnd: bpm, bars: 0, beatAt: (t) => (t - origin) / spb, secondsAt: (b) => origin + b * spb };
+}

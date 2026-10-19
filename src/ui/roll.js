@@ -94,9 +94,19 @@ export function createRoll(root, h) {
       if (BLACK.includes(pc)) g += `<rect x="0" y="${yOf(m)}" width="${width}" height="${ROW}" style="fill:var(--rule)" opacity=".35"/>`;
       if (pc === 0 || pc === 5) g += `<line x1="0" x2="${width}" y1="${yOf(m) + ROW}" y2="${yOf(m) + ROW}" style="stroke:var(--rule)"/>`;
     }
-    for (let s = 0; s <= geo.tEnd; s += 0.5) {
-      g += `<line x1="${xOf(s)}" x2="${xOf(s)}" y1="0" y2="${height}" style="stroke:var(--rule)" stroke-width="${s % 1 === 0 ? 1 : 0.5}" opacity="${s % 1 === 0 ? 0.9 : 0.5}"/>`;
-      if (s % 1 === 0 && s > 0) g += `<text x="${xOf(s) + 3}" y="11" font-size="10" style="fill:var(--ink-soft)">${s}s</text>`;
+    if (view.beatLines) {
+      // With a beat: strong lines at bars (numbered), lighter at beats, faint at the snap step.
+      for (const l of view.beatLines) {
+        if (l.t < 0 || l.t > geo.tEnd) continue;
+        const style = { bar: [1.6, 0.95, 'var(--ink-soft)'], beat: [1, 0.8, 'var(--rule)'], step: [0.5, 0.45, 'var(--rule)'] }[l.kind];
+        g += `<line x1="${xOf(l.t)}" x2="${xOf(l.t)}" y1="0" y2="${height}" style="stroke:${style[2]}" stroke-width="${style[0]}" opacity="${style[1]}"/>`;
+        if (l.label) g += `<text x="${xOf(l.t) + 3}" y="11" font-size="10" font-weight="700" style="fill:var(--ink-soft)">${l.label}</text>`;
+      }
+    } else {
+      for (let s = 0; s <= geo.tEnd; s += 0.5) {
+        g += `<line x1="${xOf(s)}" x2="${xOf(s)}" y1="0" y2="${height}" style="stroke:var(--rule)" stroke-width="${s % 1 === 0 ? 1 : 0.5}" opacity="${s % 1 === 0 ? 0.9 : 0.5}"/>`;
+        if (s % 1 === 0 && s > 0) g += `<text x="${xOf(s) + 3}" y="11" font-size="10" style="fill:var(--ink-soft)">${s}s</text>`;
+      }
     }
 
     // What you actually hummed (tuning-corrected), so drift is visible against the grid
@@ -218,7 +228,12 @@ export function createRoll(root, h) {
         preview();
       }
     } else {
-      drag.dt = Math.round((dx / geo.pps) * 100) / 100; // snap to 10 ms
+      drag.dt = Math.round((dx / geo.pps) * 100) / 100; // 10 ms steps
+      // Snap on: the edge (or the start, for a move) jumps from grid step to grid step.
+      if (view.snap) {
+        const from = drag.mode === 'end' ? n.end : n.start;
+        drag.dt = view.snap(from + dx / geo.pps) - from;
+      }
       preview();
     }
   });

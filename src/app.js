@@ -11,12 +11,12 @@ import {
 } from './core/edit.js';
 import { startMic, decodeFile } from './audio/mic.js';
 import { playNotes, playOnce, playRecording, stopPlayback, getCtx } from './audio/synth.js';
-import { blocksView, fretboardView, pianoView, staffView, drawTrace } from './ui/views.js';
+import { blocksView, fretboardView, pianoView, staffView, rhythmStaffView, drawTrace } from './ui/views.js';
 import { createRoll } from './ui/roll.js';
 import { createMetronomePanel } from './ui/metronome-panel.js';
 import { createRecordSetup } from './ui/record-setup.js';
 import { createMetronome } from './audio/metronome.js';
-import { trackTempo, secondsPerBeat, beatsPerBar } from './core/rhythm.js';
+import { trackTempo, secondsPerBeat, beatsPerBar, quantize, stepsPerBeat } from './core/rhythm.js';
 import { testModeOn, turnOffTestMode, testHumFile, shareOrDownload } from './ui/test-mode.js';
 import { harmonise, paletteFor } from './core/harmony.js';
 import { MOODS, moodById, JOURNEYS, journeyById, journeyFor } from './core/moods.js';
@@ -48,6 +48,8 @@ const state = {
   recTempo: null,    // {bpm, sig, …} if you hummed to a beat (saved with test hums)
   tempo: null,       // the beat of this hum: {bpm, sig, mode, origin, offset, drift, bpmEnd, beatAt, secondsAt}, or null
   take: null,        // while humming to a count-in: {m (metronome), bpm, sig, mode, countIn}
+  rhythm: null,      // the notes as note values (quantize), when the hum has a beat
+  snap: true,        // with a beat, drags in the roll jump from eighth to eighth
   countingIn: false,
   octave: 0,
   instrument: 'guitar',
@@ -77,10 +79,13 @@ const state = {
 function setAnalysis({ frames, recording, mask = null, tempo = null }) {
   const { notes, tuning } = transcribe(frames, { trust: state.trust, mask });
   // Hummed to a beat: where each note sits in the bar, following the singer's own tempo.
-  state.tempo = tempo && {
-    ...tempo,
-    ...trackTempo(notes.map((n) => n.start - tempo.origin), { bpm: tempo.bpm, sig: tempo.sig, limit: tempo.mode === 'throughout' ? 0.03 : 0.12 }),
-  };
+  if (tempo) {
+    const map = trackTempo(notes.map((n) => n.start - tempo.origin), { bpm: tempo.bpm, sig: tempo.sig, limit: tempo.mode === 'throughout' ? 0.03 : 0.12 });
+    // beatAt / secondsAt in the recording's own seconds, like the notes.
+    state.tempo = { ...tempo, ...map, beatAt: (t) => map.beatAt(t - tempo.origin), secondsAt: (b) => tempo.origin + map.secondsAt(b) };
+  } else {
+    state.tempo = null;
+  }
   if (state.tempo) {
     const { bpm, sig, mode, countIn, origin, offset, drift } = state.tempo;
     state.recTempo = { bpm, sig, mode, countIn, origin, offset, drift };
@@ -124,6 +129,8 @@ function derive() {
   const v = state.versions[versionKey()] || 0;
   state.progression = state.variants.length ? state.variants[v % state.variants.length] : [];
   state.chordsAt = new Map(state.progression.map((p) => [p.firstIndex, p.chord]));
+  // With a beat: the same notes as note values, ties and rests.
+  state.rhythm = state.tempo && state.notes.length ? quantize(state.notes, state.tempo) : null;
   const focus = moodById(state.stripSel != null ? state.journey[state.stripSel] : state.journey[0]) || state.mood;
   state.palette = state.home ? paletteFor(focus, state.home) : [];
   state.fingering = fingerMelody(state.notes);
@@ -149,7 +156,10 @@ function renderRoll() {
   roll.render({
     notes: state.notes, frames: state.frames, tuning: state.tuning, shift: state.octave * 12,
     selected: state.selected, flats: state.flats,
+    beatLines: beatLines(), snap: state.tempo && state.snap ? snapTime : null,
   });
+  $('ed-snap').hidden = !state.tempo;
+  $('ed-snap').setAttribute('aria-pressed', String(state.snap));
   const sel = state.selected != null;
   for (const id of ['ed-up', 'ed-down', 'ed-oct-up', 'ed-oct-down', 'ed-split', 'ed-delete', 'ed-shorter', 'ed-longer']) $(id).disabled = !sel;
   $('ed-prev').disabled = !state.notes.length || state.selected === 0;
@@ -168,6 +178,26 @@ function renderRoll() {
   const edits = state.detected.filter((n) => n.edited).length;
   $('edit-count').textContent = edits ? `${edits} note${edits === 1 ? '' : 's'} edited` : '';
   renderGuess();
+}
+
+/** Snap a time to the nearest eighth note of this hum's beat. */
+function snapTime(t) {
+  const per = stepsPerBeat(state.tempo.sig);
+  return state.tempo.secondsAt(Math.round(state.tempo.beatAt(t) * per) / per);
+}
+
+/** The roll's grid with a beat: a line per eighth, stronger on beats, strongest (and numbered) on bars. */
+function beatLines() {
+  const t = state.tempo;
+  if (!t) return null;
+  const per = stepsPerBeat(t.sig), bar = beatsPerBar(t.sig) * per;
+  const last = Math.max(state.notes.at(-1)?.end ?? 0, state.frames.at(-1)?.t ?? 0) + 2;
+  const lines = [];
+  for (let e = Math.floor(t.beatAt(0) * per); e <= Math.ceil(t.beatAt(last) * per); e++) {
+    const kind = e % bar === 0 ? 'bar' : e % per === 0 ? 'beat' : 'step';
+    lines.push({ t: t.secondsAt(e / per), kind, label: kind === 'bar' && e >= 0 ? String(e / bar + 1) : '' });
+  }
+  return lines;
 }
 
 /** When the selected note is a best guess, say why and offer the other note. */
@@ -236,7 +266,7 @@ function renderFacts() {
 function renderBlocks() {
   $('blocks').innerHTML = blocksView({
     notes: state.notes, fingering: state.fingering, chordsAt: state.chordsAt, flats: state.flats,
-    instrument: state.instrument, active: state.active, selected: state.selected,
+    instrument: state.instrument, active: state.active, selected: state.selected, rhythm: state.rhythm,
   });
 }
 
@@ -253,10 +283,14 @@ function renderInstrument() {
     box.innerHTML = pianoView({ notes: state.notes, active: state.active, selected: state.selected, chordTones: state.chordTones });
     $('inst-hint').textContent = 'Blue keys are the notes in your hum. The darker one is the note playing now. Orange keys show a chord you tapped.';
   }
-  $('staff').innerHTML = staffView({
+  const staff = {
     notes: state.notes, flats: state.flats, instrument: state.instrument, chordsAt: state.chordsAt,
     active: state.active, selected: state.selected,
-  });
+  };
+  // With a beat: real note values, bars and rests, wrapped to the screen's width.
+  $('staff').innerHTML = state.rhythm
+    ? rhythmStaffView({ ...staff, rhythm: state.rhythm, width: $('staff').clientWidth || 860 })
+    : staffView(staff);
 }
 
 function renderChords() {
@@ -570,6 +604,7 @@ function showView(name) {
   // The trace and the roll measure their own width, so draw them once they're on screen.
   if (name === 'hum') renderTrace();
   if (name === 'notes') renderRoll();
+  if (name === 'play') renderInstrument(); // the staff wraps to the width it has
   if (name === 'chords') $('moods').querySelector('.mood.on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
 }
 
@@ -956,6 +991,11 @@ function init() {
   $('ed-next').addEventListener('click', () => step(1));
   $('ed-done').addEventListener('click', () => { state.selected = null; renderRoll(); renderBlocks(); renderInstrument(); renderNoteChords(); });
   $('zoom-in').addEventListener('click', () => roll.zoom(1.5));
+  $('ed-snap').addEventListener('click', () => {
+    state.snap = !state.snap;
+    renderRoll();
+    setStatus(state.snap ? 'Snap on: dragged notes jump to the nearest eighth note.' : 'Snap off: drag notes freely.');
+  });
   $('zoom-out').addEventListener('click', () => roll.zoom(1 / 1.5));
   $('moods').addEventListener('click', onMoodAction);
   initStrip();

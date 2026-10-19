@@ -280,6 +280,7 @@ button.rec.on .dot { border-radius: 2px; animation: pulse 1s infinite; }
 .editor-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .editor-acts { display: flex; align-items: center; gap: 8px; }
 .editor-acts .tool { min-height: 40px; }
+.editor-acts .tool[hidden] { display: none; }
 .zoom { display: inline-flex; align-items: center; gap: 6px; }
 .zoom .tool { width: 36px; justify-content: center; padding: 6px 0; font-size: 17px; }
 .tools { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
@@ -341,6 +342,8 @@ body.has-dock { padding-bottom: 230px; }
 .block .n { font: 700 20px/1 var(--font-display); }
 .block .n sub { font-size: 11px; color: var(--ink-soft); vertical-align: baseline; }
 .block .f { font: 11px/1.25 var(--font-mono); color: var(--ink-soft); white-space: nowrap; text-align: center; }
+.block .val { position: absolute; bottom: 3px; left: 6px; font: 15px/1 var(--font-music); color: var(--ink-soft); }
+.block.active .val { color: var(--accent-ink); }
 .block .chord { position: absolute; top: -21px; left: 0; font: 700 13px/1 var(--font-display); color: var(--warm); white-space: nowrap; }
 .block.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); transform: translateY(-3px); }
 .block.active .f, .block.active .n sub { color: var(--accent-ink); }
