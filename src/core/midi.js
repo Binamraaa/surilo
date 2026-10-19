@@ -52,7 +52,7 @@ export function toMidiFile(notes, progression = [], { rhythm = null, tempo = nul
   const offset = notes.length ? notes[0].start : 0;
   const conductor = track(grid
     ? [tempoEvent(tempo.sig === '6/8' ? tempo.bpm * 1.5 : tempo.bpm), { tick: 0, order: 0, bytes: [0xff, 0x58, 0x04, ...SIG_EVENT[tempo.sig]] }]
-    : [tempoEvent(BPM)], 'Hum to Notes');
+    : [tempoEvent(BPM)], 'Surilo');
 
   const mel = [];
   notes.forEach((n, i) => {

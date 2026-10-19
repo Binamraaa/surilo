@@ -1,4 +1,5 @@
-// Hum to Notes — UI wiring. All analysis lives in src/core (pure, testable, reusable).
+// Surilo — UI wiring. All analysis lives in src/core (pure, testable, reusable).
+// (The app was called Hum to Notes; its saved settings keep their hum-to-notes.* names.)
 
 import { analyseBuffer, levelStats } from './core/pitch.js';
 import { midiToName, centsOff } from './core/notes.js';
@@ -22,6 +23,9 @@ import { harmonise, paletteFor, barSlots } from './core/harmony.js';
 import { MOODS, moodById, JOURNEYS, journeyById, journeyFor } from './core/moods.js';
 
 const $ = (id) => document.getElementById(id);
+// Surilo is free; a tip is optional and unlocks nothing. Put the tip page here (GitHub Sponsors,
+// Ko-fi…) and the "Leave a tip" button appears in About Surilo. Empty: no button.
+const TIP_URL = '';
 const inArtifact = typeof window.claude === 'object' && window.claude !== null;
 
 // How far the tune's key may overrule this singer's pitch when picking the note they
@@ -1050,6 +1054,7 @@ function applyEdit(edit) {
 
 function init() {
   initTheme();
+  if (TIP_URL) { $('tip').href = TIP_URL; $('tip').hidden = false; }
   metro = createMetronomePanel({ getCtx });
   recSetup = createRecordSetup({ metro, say: setStatus });
   if (testModeOn()) $('test-kit').hidden = false;

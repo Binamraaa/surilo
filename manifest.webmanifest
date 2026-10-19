@@ -1,7 +1,7 @@
 {
-  "name": "Hum to Notes",
-  "short_name": "Hum to Notes",
-  "description": "Hum a melody and see the notes, guitar frets, piano keys and chords that fit.",
+  "name": "Surilo – hum to notes and chords",
+  "short_name": "Surilo",
+  "description": "Hum a melody and see the notes, guitar frets, piano keys and chords that fit in any mood. Free and private.",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#f3f6fb",

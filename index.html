@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Hum to Notes</title>
-<meta name="description" content="Hum a melody and see the notes, where to play them on guitar and piano, the likely key, and chords that fit.">
+<title>Surilo – hum to notes and chords</title>
+<meta name="description" content="Surilo: hum a melody and see the notes, where to play them on guitar and piano, and chords that fit in any mood. Free, private, nothing is generated: it helps you find your own music.">
 <meta name="theme-color" content="#2f5be0">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -18,7 +18,7 @@
 <!--APP-->
 <header class="appbar">
   <div class="appbar-in">
-    <h1>Hum to <span>Notes</span></h1>
+    <h1>Suri<span>lo</span></h1>
     <!-- Four sections. A tab bar at the bottom on phones, in this bar on wider screens. -->
     <nav class="tabs" id="tabs" role="tablist" aria-label="Sections">
       <button type="button" role="tab" id="tab-hum" data-view="hum" aria-selected="true" aria-controls="view-hum">
@@ -124,6 +124,16 @@
           <button type="button" class="toggle" id="metro-accent" aria-pressed="true">Louder beat 1</button>
         </div>
         <p class="hint" id="metro-hint"></p>
+      </div>
+    </section>
+
+    <section class="panel about" aria-labelledby="about-h">
+      <h2 id="about-h">About Surilo</h2>
+      <p class="hint"><b>Surilo</b> (सुरिलो) is Nepali for <i>tuneful</i>. Hum the tune in your head, and Surilo helps you find its notes, its chords and where to play it. Nothing is generated: every note is one you hummed.</p>
+      <p class="hint">Free for everyone, always. No ads, no account, and your voice never leaves your device. Surilo is open source.</p>
+      <div class="about-row">
+        <a class="btn primary" id="tip" href="" target="_blank" rel="noopener" hidden>♥ Leave a tip</a>
+        <a class="btn" href="https://github.com/Binamraaa/hum-to-notes" target="_blank" rel="noopener">See the code</a>
       </div>
     </section>
   </section>

@@ -1,8 +1,12 @@
-# Hum to Notes
+# Surilo
 
-Hum a melody you know by ear and see the notes, where to play them on guitar or piano, the likely key, and chords that fit.
+**Surilo** (सुरिलो, Nepali for *tuneful*) turns a hummed melody into notes, chords and where to play them. Hum a tune you know by ear and see the notes, where to play them on guitar or piano, the likely key, and chords that fit in nine moods.
 
 Made for beginner and intermediate players who can hum a tune but can't yet find it on their instrument. It's built for quick experimenting, not studio-grade transcription.
+
+**Nothing is generated.** Surilo never writes music for you: every note is one you hummed, and a mood only changes the chords underneath. It's a tool to help you find your own music.
+
+**Free for everyone, always.** No ads, no account, and your voice never leaves your device. If Surilo helps you, you can leave a tip; it unlocks nothing.
 
 **Live demo:** https://binamraaa.github.io/hum-to-notes/
 
@@ -113,5 +117,7 @@ Hum on "mmm" or "doo", one note at a time, in a quiet room. Leave a tiny gap bet
 Built with help from [Claude](https://claude.ai), Anthropic's AI assistant, used for coding and testing.
 
 ## License
+
+The code is MIT licensed (see `LICENSE`): use it, fork it, build on it. The name **Surilo** and its logo aren't part of that licence; see [TRADEMARK.md](TRADEMARK.md).
 
 MIT

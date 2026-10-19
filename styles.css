@@ -117,6 +117,12 @@ details.help[open] summary::before { transform: rotate(90deg); }
 .toolbox .label { display: block; margin: 6px 0 8px; }
 .toolbox .chords + .label { margin-top: 16px; }
 
+/* About Surilo: the promise, and an optional tip. */
+.about-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.about-row a { text-decoration: none; min-height: 44px; justify-content: center; }
+.about-row a[hidden] { display: none; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
 /* Setting the tempo of an upload or sample. */
 .tempo-row { display: flex; gap: 8px; }
 .tempo-row .tool[hidden] { display: none; }

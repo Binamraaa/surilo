@@ -1,6 +1,12 @@
-# Hum to Notes: notes for Claude Code
+# Surilo: notes for Claude Code
 
-A browser app: hum a melody, then see the notes as blocks, on a guitar fretboard, a piano and a staff, with a key guess and chord suggestions. It's a public GitHub portfolio project. It's meant for quick experimenting, not studio-grade transcription.
+Surilo (formerly Hum to Notes; the repo and the Pages URL still use hum-to-notes) is a browser app: hum a melody, then see the notes as blocks, on a guitar fretboard, a piano and a staff, with a key guess and chord suggestions. It's a public GitHub portfolio project. It's meant for quick experimenting, not studio-grade transcription.
+
+## Product
+- Free for everyone, open source (MIT), no ads, no account. The only money is an optional tip that unlocks nothing: `TIP_URL` at the top of app.js (empty = no tip button), and later an in-app purchase in the store builds.
+- Positioning: nothing is generated. Never add features that write music for the user; the app helps them find their own notes and chords.
+- The name Surilo and the logo aren't covered by the MIT licence (TRADEMARK.md).
+- Saved settings and the test-hum format keep their old `hum-to-notes.*` / `hum-to-notes-test` names on purpose: renaming them would wipe users' settings and orphan the saved test hums.
 
 ## Stack and constraints
 - Vanilla JS ES modules, no framework and **no build step**. `index.html` loads `src/app.js` directly. Keep it that way so GitHub Pages serves the repo root as-is.
@@ -12,7 +18,7 @@ A browser app: hum a melody, then see the notes as blocks, on a guitar fretboard
 - `node scripts/sweep.mjs [steady|sloppy|chromatic] [--misses]`: accuracy sweep over 522 synthetic hums. Caches pitch frames in `.cache/` (gitignored); delete it after changing `pitch.js` or `demo.js`.
 - `python -m http.server 8000` (or `npx serve`), then open http://localhost:8000
 - `node scripts/real-hums.mjs <folder> [--misses]`: grades the current code on real test hums (WAVs saved from test mode). The user's set is in `G:/My Drive/Hum to Notes tests` (Google Drive for desktop); `$HUM_TESTS` or `testdata/hums/` (gitignored) also work. Run it before and after accuracy changes, alongside the sweep.
-- `npm run build`: bundles `dist/hum-to-notes.html` and `dist/embed.html` (needs `npm i`)
+- `npm run build`: bundles `dist/surilo.html` and `dist/embed.html` (needs `npm i`)
 
 ## Architecture
 - `src/core/`: **pure logic, with no DOM and no Web Audio**. It must keep running in Node. This module will later feed hummed ideas as MIDI into a separate Reaper-based "AI producer" project, so keep it clean and dependency-free.
