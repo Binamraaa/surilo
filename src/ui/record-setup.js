@@ -55,7 +55,7 @@ export function createRecordSetup({ metro, say }) {
     s.mode = b.dataset.click;
     if (s.mode === 'throughout' && !s.warned) {
       s.warned = true;
-      say('Plug in headphones for "Click all the way". Without them the mic hears the click.', true);
+      say('Plug in headphones for "Keep clicking". Without them the mic hears the click.', true);
     }
     save(); draw();
   });

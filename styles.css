@@ -144,8 +144,9 @@ details.help[open] summary::before { transform: rotate(90deg); }
 .rec-dots .dot { width: 30px; height: 30px; }
 .live-note.counting .name { color: var(--accent); }
 @media (max-width: 720px) {
-  .rec-row .seg { width: 100%; }
-  .rec-row .seg button { flex: 1 1 0; padding: 8px 6px; font-size: 13px; }
+  #click-mode, #ts-sig, #ts-start { width: 100%; }
+  #click-mode button, #ts-sig button, #ts-start button { flex: 1 1 auto; padding: 8px 8px; font-size: 13px; white-space: nowrap; }
+  .rec-row .toggle { padding: 8px 12px; }
 }
 button.rec.big { min-height: 58px; font-size: 17px; justify-content: center; justify-self: start; min-width: 280px; }
 .or-row { display: flex; flex-wrap: wrap; gap: 10px; }

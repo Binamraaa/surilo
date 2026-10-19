@@ -690,7 +690,7 @@ async function toggleRecording() {
   }
 }
 
-/** Count in, then keep the beat on the dots (and, with "Click all the way", in your ears). */
+/** Count in, then keep the beat on the dots (and, with "Keep clicking", in your ears). */
 function startTake(mode) {
   const { bpm, sig } = metro;
   const bpb = beatsPerBar(sig);
