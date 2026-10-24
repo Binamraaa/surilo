@@ -1,6 +1,6 @@
 # Surilo: notes for Claude Code
 
-Surilo (formerly Hum to Notes; the repo still uses hum-to-notes) is live at https://surilo.vercel.app. It is a browser app: hum a melody, then see the notes as blocks, on a guitar fretboard, a piano and a staff, with a key guess and chord suggestions. It's a public GitHub portfolio project. It's meant for quick experimenting, not studio-grade transcription.
+Surilo (formerly Hum to Notes; the GitHub repo is `Binamraaa/surilo`, the local folder is still hum-to-notes) is live at https://surilo.vercel.app. It is a browser app: hum a melody, then see the notes as blocks, on a guitar fretboard, a piano and a staff, with a key guess and chord suggestions. It's a public GitHub portfolio project. It's meant for quick experimenting, not studio-grade transcription.
 
 ## Product
 - Free for everyone, open source (MIT), no ads, no account. The only money is an optional tip that unlocks nothing: **♥ Leave a tip** in About Surilo shows the maker's eSewa QR (`assets/tip-esewa.png`, cropped so the phone number isn't printed); store builds will need an in-app purchase instead (app-store payment rules).
