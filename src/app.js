@@ -21,6 +21,10 @@ import { trackTempo, secondsPerBeat, beatsPerBar, quantize, stepsPerBeat, accent
 import { testModeOn, turnOffTestMode, testHumFile, shareOrDownload } from './ui/test-mode.js';
 import { harmonise, paletteFor, barSlots } from './core/harmony.js';
 import { MOODS, moodById, JOURNEYS, journeyById, journeyFor } from './core/moods.js';
+import { humMeta, readHumMeta, defaultHumName, humFileName } from './core/saved-hum.js';
+import { encodeWav, decodeWav } from './core/wav.js';
+import { addHum, updateHum, renameHum, getHum, deleteHum } from './ui/hum-store.js';
+import { createMyHums } from './ui/my-hums.js';
 
 const $ = (id) => document.getElementById(id);
 const inArtifact = typeof window.claude === 'object' && window.claude !== null;
@@ -70,6 +74,9 @@ const state = {
   versions: {},      // which variation ("Try another version") each mood, or 'journey', is showing
   playingProg: null, // the chords being played, so the keyboard can follow them
   playing: null,     // which playback button is playing: 'notes', 'chords', 'hum' (or 'card')
+  humId: null,       // this hum's id in My hums (null: not kept, e.g. a sample)
+  humName: null,
+  humCreated: null,
   // derived
   notes: [], key: null, keys: [], home: null, flats: false, fingering: [],
   slots: [], journey: [], mood: null, variants: [], progression: [], palette: [], chordsAt: new Map(),
@@ -84,8 +91,10 @@ const state = {
  * from bar 1 at `tempo.origin` (s). beatAt / secondsAt use the recording's own seconds.
  */
 function followTempo(tempo, notes) {
-  const map = trackTempo(notes.map((n) => n.start - tempo.origin), { bpm: tempo.bpm, sig: tempo.sig, limit: tempo.mode === 'throughout' ? 0.03 : 0.12 });
-  return { ...tempo, ...map, beatAt: (t) => map.beatAt(t - tempo.origin), secondsAt: (b) => tempo.origin + map.secondsAt(b) };
+  const starts = notes.map((n) => n.start);
+  const map = trackTempo(starts.map((t) => t - tempo.origin), { bpm: tempo.bpm, sig: tempo.sig, limit: tempo.mode === 'throughout' ? 0.03 : 0.12 });
+  // `starts` are kept with a saved hum, so opening it again follows the same tempo.
+  return { ...tempo, ...map, starts, beatAt: (t) => map.beatAt(t - tempo.origin), secondsAt: (b) => tempo.origin + map.secondsAt(b) };
 }
 
 function setAnalysis({ frames, recording, mask = null, tempo = null }) {
@@ -234,7 +243,14 @@ function renderAll() {
   const has = state.notes.length > 0;
   for (const id of ['play-notes', 'play-chords', 'midi']) $(id).disabled = !has;
   $('play-hum').disabled = !state.recording;
+  renderHumFile();
   renderTestKit();
+  scheduleSave(); // every change to a kept hum is saved (after a short pause)
+}
+
+/** Save as file is for hums kept in My hums (not samples). Downloads are blocked inside a Claude artifact. */
+function renderHumFile() {
+  $('hum-file').hidden = $('hum-file-hint').hidden = !state.humId || inArtifact;
 }
 
 /** Test mode: can this hum be saved as a test? Say why not. */
@@ -642,6 +658,7 @@ function setPlaying(kind) {
 async function toggleRecording() {
   if (state.mic) return stopRecording();
   stopPlayback();
+  saveNow(); // the open hum's last changes, before the live notes replace it
   const beat = recSetup.mode; // 'off', 'countin' or 'throughout'
   // Off, but humming along to the metronome card: remember the tempo for test hums, as before.
   state.recTempo = beat === 'off' && metro.metronome?.running ? { bpm: metro.bpm, sig: metro.sig } : null;
@@ -672,6 +689,7 @@ async function toggleRecording() {
         renderBlocks();
       }
     }, { ctx: getCtx() });
+    leaveHum();
     $('rec').classList.add('on');
     $('rec-label').textContent = 'Stop';
     $('mode-label').textContent = 'Listening';
@@ -757,34 +775,45 @@ function stopRecording() {
   $('mode-label').textContent = 'Your hum';
   showLive(null);
   state.source = 'mic';
-  analyseRecording(rec, 'your hum');
+  analyseRecording(rec, 'your hum', { keepAs: defaultHumName() });
 }
 
-function analyseRecording(rec, label, { quiet = false } = {}) {
+/** Hummed to clicks (a count-in, or clicks throughout)? */
+const clicked = (tempo) => tempo && (tempo.mode === 'countin' || tempo.mode === 'throughout');
+
+/**
+ * The count-in is only clicks: ignore it, except that a note may start up to half a
+ * beat early (a pickup, or just eager). Returns where clicks may leak into the mic, so
+ * they can't start a note (or null).
+ */
+function skipCountIn(frames, tempo) {
+  if (!clicked(tempo)) return null;
+  const from = tempo.origin - secondsPerBeat(tempo.bpm, tempo.sig) / 2;
+  for (const f of frames) if (f.t < from) f.midi = null;
+  return tempo.clicks.map((t) => [t, t + 0.035]);
+}
+
+/** Find the notes in a recording. `keepAs`: keep it in My hums under that name, if notes are found. */
+function analyseRecording(rec, label, { quiet = false, keepAs = null } = {}) {
   if (!quiet) setStatus('Finding the notes…');
   // Let the status paint before the (sub-second) analysis blocks the thread.
   setTimeout(() => {
-    const frames = analyseBuffer(rec.samples, rec.sampleRate);
     const tempo = rec.tempo || null;
-    let mask = null;
-    if (tempo && (tempo.mode === 'countin' || tempo.mode === 'throughout')) {
-      if (rec.samples.length / rec.sampleRate < tempo.origin + 0.2) {
-        setStatus('You stopped during the count-in. Press Start humming, wait for the clicks, then hum from beat 1.', true);
-        return;
-      }
-      // The count-in is only clicks: ignore it, except that a note may start up to
-      // half a beat early (a pickup, or just eager). Clicks can't start a note.
-      const from = tempo.origin - secondsPerBeat(tempo.bpm, tempo.sig) / 2;
-      for (const f of frames) if (f.t < from) f.midi = null;
-      mask = tempo.clicks.map((t) => [t, t + 0.035]);
+    if (clicked(tempo) && rec.samples.length / rec.sampleRate < tempo.origin + 0.2) {
+      setStatus('You stopped during the count-in. Press Start humming, wait for the clicks, then hum from beat 1.', true);
+      return;
     }
+    const frames = analyseBuffer(rec.samples, rec.sampleRate);
+    const mask = skipCountIn(frames, tempo);
     setAnalysis({ frames, recording: rec, mask, tempo });
     const n = state.notes.length;
     const guesses = state.notes.filter((x) => x.adjusted).length;
     if (n) {
+      const first = keepAs && myHums.usable && !myHums.count;
+      if (keepAs) keepHum(keepAs);
       if (quiet) return;
       showView('notes');
-      setStatus(`Found ${n} note${n === 1 ? '' : 's'} in ${label}.${guesses ? ` ${guesses === 1 ? 'One was' : `${guesses} were`} between two notes, so I picked the one that fits the tune (dashed, marked ≈). Tap it to check.` : ''}${timingNote()}`);
+      setStatus(`Found ${n} note${n === 1 ? '' : 's'} in ${label}.${guesses ? ` ${guesses === 1 ? 'One was' : `${guesses} were`} between two notes, so I picked the one that fits the tune (dashed, marked ≈). Tap it to check.` : ''}${timingNote()}${first ? ' Your hums are kept in My hums, on the Hum tab, with your edits.' : ''}`);
       return;
     }
     // Explain *why* nothing was found, so it's clear whether it's the mic or the hum.
@@ -824,16 +853,27 @@ async function onFile(e) {
   stopPlayback();
   setStatus(`Opening ${file.name}…`);
   try {
+    // A hum saved from Surilo (a .surilo.wav): bring back its notes, beat and chords.
+    let wav = null;
+    try { wav = decodeWav(new Uint8Array(await file.arrayBuffer())); } catch { /* not a WAV this can read: decoded as audio below */ }
+    const saved = wav && readHumMeta(wav.meta);
+    if (saved) {
+      leaveHum();
+      await importHum(saved, wav);
+      e.target.value = '';
+      return;
+    }
     const rec = await decodeFile(file);
     if (rec.samples.length / rec.sampleRate > 60) {
       rec.samples = rec.samples.subarray(0, rec.sampleRate * 60);
       setStatus('Using the first 60 seconds.');
     }
+    leaveHum();
     $('mode-label').textContent = 'Uploaded';
     $('sample').value = '';
     Object.assign(state, { source: 'upload', micLabel: file.name, recTempo: null });
     rec.tempo = null;
-    analyseRecording(rec, file.name);
+    analyseRecording(rec, file.name, { keepAs: file.name.replace(/\.[^.]+$/, '') || defaultHumName() });
   } catch {
     setStatus('That file couldn\'t be read as audio. Try a .m4a, .mp3 or .wav voice memo.', true);
   }
@@ -843,6 +883,7 @@ async function onFile(e) {
 function loadSample(name, { quiet = false } = {}) {
   if (!DEMO_MELODIES[name]) return;
   stopPlayback();
+  leaveHum();
   const rec = synthHum(DEMO_MELODIES[name]);
   // Samples are made at 100 BPM, so they come with their beat (and any pickup before bar 1).
   const { sig, pickup } = DEMO_TIMING[name];
@@ -934,6 +975,213 @@ async function saveTestHum() {
     downloaded: `Downloaded ${file.name} (${mb} MB). Move it to the "Hum to Notes tests" folder in Drive.`,
     cancelled: 'Not saved.',
   }[how]);
+}
+
+// ---------- My hums (kept on this device) ----------
+
+let myHums = null;
+let saveTimer = 0;
+let savedJson = ''; // what's stored for the open hum, to skip saves that change nothing
+
+const newHumId = () => crypto.randomUUID?.() ?? `h${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+
+/** The open hum as saved-hum JSON: its notes, beat and chord choices. */
+function humSnapshot() {
+  const { moodId, homeKey, journeyId, strip, versions, octave } = state;
+  return humMeta({
+    id: state.humId, name: state.humName, createdAt: state.humCreated, source: state.source, mic: state.micLabel,
+    original: state.original, notes: state.detected, tuning: state.tuning, tempo: state.tempo,
+    choices: { moodId, homeKey, journeyId, strip, versions, octave },
+  });
+}
+
+/** One line for the list: "C major · 9 notes · Dreamy". */
+function humSummary() {
+  const n = state.detected.length;
+  const preset = journeyById(state.journeyId);
+  const mood = state.strip ? 'Your mix' : preset?.moods ? preset.name : state.mood?.name;
+  return [state.home && keyName(state.home), `${n} note${n === 1 ? '' : 's'}`, state.tempo && `${state.tempo.bpm} BPM`, mood].filter(Boolean).join(' · ');
+}
+
+/** Keep the hum that's open (just recorded or uploaded) in My hums. */
+async function keepHum(name) {
+  const id = newHumId();
+  Object.assign(state, { humId: id, humName: name, humCreated: new Date().toISOString() });
+  const meta = humSnapshot();
+  savedJson = JSON.stringify(meta);
+  const { samples, sampleRate } = state.recording;
+  try {
+    await addHum({
+      id, name, createdAt: state.humCreated, updatedAt: state.humCreated,
+      duration: samples.length / sampleRate, summary: humSummary(), meta,
+    }, encodeWav(samples, sampleRate));
+  } catch {
+    if (state.humId === id) state.humId = null;
+    if (myHums.usable) setStatus('This hum couldn\'t be kept on the device (its storage may be full). Delete some old hums in My hums to make room.', true);
+  }
+  renderHumFile();
+  myHums.refresh();
+}
+
+/** Save the open hum's changes after a short pause, so a run of edits is one save. */
+function scheduleSave() {
+  if (!state.humId || state.mic) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveNow, 600);
+}
+
+async function saveNow() {
+  clearTimeout(saveTimer);
+  if (!state.humId || state.mic) return;
+  const meta = humSnapshot();
+  const json = JSON.stringify(meta);
+  if (json === savedJson) return;
+  savedJson = json;
+  try {
+    const kept = await updateHum(state.humId, { name: state.humName, meta, summary: humSummary(), updatedAt: new Date().toISOString() });
+    if (!kept) savedJson = '';
+  } catch {
+    savedJson = '';
+  }
+  myHums.refresh();
+}
+
+/** Before something else takes the screen: save the open hum's last changes. */
+function leaveHum() {
+  saveNow();
+  state.humId = null;
+  renderHumFile();
+  myHums.draw();
+}
+
+/**
+ * Put a saved hum back on screen exactly as it was left: the notes as detected and as
+ * edited, the beat, the mood and chord choices. Only the pitch trace is worked out again.
+ */
+function restoreHum(saved, rec, { id, name, createdAt }) {
+  stopPlayback();
+  const frames = analyseBuffer(rec.samples, rec.sampleRate);
+  const t = saved.tempo;
+  skipCountIn(frames, t);
+  const original = withIds(saved.original);
+  const detected = saved.notes ? withIds(saved.notes) : original;
+  const starts = t?.starts.length ? t.starts : original.map((n) => n.start);
+  Object.assign(state, {
+    frames, original, detected, tuning: saved.tuning, recording: rec,
+    tempo: t ? followTempo(t, starts.map((start) => ({ start }))) : null,
+    source: saved.source || 'upload', micLabel: saved.mic,
+    selected: null, chordTones: [], stripSel: null,
+    ...saved.choices,
+    humId: id, humName: name, humCreated: createdAt,
+  });
+  state.recTempo = state.tempo && clicked(state.tempo)
+    ? (({ bpm, sig, mode, countIn, origin, offset, drift }) => ({ bpm, sig, mode, countIn, origin, offset, drift }))(state.tempo)
+    : null;
+  state.history.clear();
+  document.querySelectorAll('[data-oct]').forEach((x) => x.setAttribute('aria-pressed', String(Number(x.dataset.oct) === state.octave)));
+  $('mode-label').textContent = 'From My hums';
+  $('sample').value = '';
+  savedJson = JSON.stringify(humSnapshot());
+  derive();
+  renderAll();
+  myHums.draw();
+  showView('notes');
+}
+
+async function openHum(id) {
+  if (state.mic) { setStatus('Stop humming first, then open a saved hum.', true); return; }
+  if (id === state.humId) { showView('notes'); return; }
+  leaveHum();
+  try {
+    const got = await getHum(id);
+    const saved = got && readHumMeta(got.meta);
+    if (!saved) throw new Error('missing');
+    restoreHum(saved, decodeWav(got.wav), got);
+    setStatus(`Opened "${got.name}", as you left it.`);
+  } catch {
+    setStatus('That hum couldn\'t be opened. Its recording may have been cleared by the browser.', true);
+    myHums.refresh();
+  }
+}
+
+/** Open a hum saved as a file (here or on another device), and keep it in My hums. */
+async function importHum(saved, wav) {
+  const rec = { samples: wav.samples, sampleRate: wav.sampleRate };
+  // Already here, unchanged? Just open it. Changed elsewhere? Keep it as a copy.
+  const there = saved.id && await getHum(saved.id).catch(() => null);
+  if (there && JSON.stringify(there.meta) === JSON.stringify(wav.meta)) {
+    restoreHum(saved, rec, there);
+    setStatus(`Opened "${there.name}". It's already in My hums.`);
+    return;
+  }
+  const id = there || !saved.id ? newHumId() : saved.id;
+  const createdAt = saved.createdAt || new Date().toISOString();
+  restoreHum(saved, rec, { id, name: saved.name, createdAt });
+  const meta = humSnapshot();
+  savedJson = JSON.stringify(meta);
+  try {
+    await addHum({
+      id, name: saved.name, createdAt, updatedAt: new Date().toISOString(),
+      duration: rec.samples.length / rec.sampleRate, summary: humSummary(), meta,
+    }, encodeWav(rec.samples, rec.sampleRate));
+    setStatus(`Opened "${saved.name}", with its notes and chords as they were saved. It's now in My hums.`);
+  } catch {
+    state.humId = null;
+    setStatus(`Opened "${saved.name}", with its notes and chords as they were saved.`);
+  }
+  renderHumFile();
+  myHums.refresh();
+}
+
+/** The hum as one .wav file: it plays anywhere, and opening it in Surilo brings everything back. */
+async function saveHumFile(id = state.humId) {
+  let file;
+  if (id === state.humId) {
+    // The open hum: build the file straight away, as sharing only works close to the tap.
+    const { samples, sampleRate } = state.recording;
+    file = new File([encodeWav(samples, sampleRate, humSnapshot())], humFileName(state.humName), { type: 'audio/wav' });
+  } else {
+    const got = await getHum(id).catch(() => null);
+    if (!got) { setStatus('That hum couldn\'t be read.', true); return; }
+    const { samples, sampleRate } = decodeWav(got.wav);
+    file = new File([encodeWav(samples, sampleRate, got.meta)], humFileName(got.name), { type: 'audio/wav' });
+  }
+  const how = await shareOrDownload(file);
+  setStatus({
+    shared: `Shared ${file.name}. Open it with Upload a recording to pick up where you left off.`,
+    downloaded: `Downloaded ${file.name}. Open it with Upload a recording, on any device, to pick up where you left off.`,
+    cancelled: 'Not saved.',
+  }[how]);
+}
+
+async function renameKept(id, name) {
+  if (id === state.humId) await saveNow(); // its latest changes first
+  try {
+    await renameHum(id, name);
+    if (id === state.humId) {
+      state.humName = name;
+      savedJson = JSON.stringify(humSnapshot());
+    }
+    setStatus(`Renamed to "${name}".`);
+  } catch {
+    setStatus('That hum couldn\'t be renamed.', true);
+  }
+  myHums.refresh();
+}
+
+async function deleteKept(id) {
+  if (id === state.humId) {
+    clearTimeout(saveTimer);
+    state.humId = null;
+    renderHumFile();
+  }
+  try {
+    await deleteHum(id);
+    setStatus('Deleted from My hums.');
+  } catch {
+    setStatus('That hum couldn\'t be deleted.', true);
+  }
+  myHums.refresh();
 }
 
 // ---------- Set tempo (uploads, samples, or to change a hum's beat) ----------
@@ -1059,6 +1307,13 @@ function init() {
     if (!box.hidden) box.scrollIntoView({ block: 'nearest' });
   });
   metro = createMetronomePanel({ getCtx });
+  myHums = createMyHums({
+    current: () => state.humId, onOpen: openHum, onRename: renameKept, onDelete: deleteKept,
+    onSaveFile: (id) => saveHumFile(id), files: !inArtifact,
+  });
+  myHums.refresh();
+  // A hum's last changes are saved when you leave the page, too.
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveNow(); });
   recSetup = createRecordSetup({ metro, say: setStatus });
   if (testModeOn()) $('test-kit').hidden = false;
   $('test-save').addEventListener('click', saveTestHum);
@@ -1144,6 +1399,7 @@ function init() {
   // The metronome's floating pill takes you back to the metronome, on the Hum section.
   $('metro-mini-show').addEventListener('click', () => { showView('hum'); $('metro').scrollIntoView({ block: 'start' }); });
   $('midi').addEventListener('click', saveMidi);
+  $('hum-file').addEventListener('click', () => saveHumFile());
   // Downloads started by the page are blocked inside a Claude artifact; MIDI export is for the hosted version.
   if (inArtifact) $('midi').hidden = true;
 

@@ -95,6 +95,18 @@
       <p class="hint">Hum on "mmm" or "doo", one note at a time, in a quiet room. Pitch detection runs on your device: nothing is uploaded.</p>
     </section>
 
+    <!-- Earlier hums, kept on this device. Hidden until there's one. -->
+    <section class="panel my-hums" id="my-hums" aria-labelledby="my-hums-h" hidden>
+      <div class="panel-head">
+        <h2 id="my-hums-h">My hums</h2>
+        <span class="label" id="hum-count"></span>
+      </div>
+      <p class="hint" id="hum-none" hidden>This browser isn't letting Surilo keep hums on this device (a private window can do that). You can still save each hum as a file from the Play tab.</p>
+      <ul class="hum-list" id="hum-list"></ul>
+      <button type="button" class="tool" id="hum-more" hidden></button>
+      <p class="hint">Every hum you record or upload is kept here, on this device only, with your edits and chords. Tap one to pick up where you left off. Browsers can clear a site's data (Safari does after a week or so without a visit, unless Surilo is on your home screen), so use <b>Save as file</b> for hums you want to keep for good.</p>
+    </section>
+
     <section class="panel metro" id="metro" aria-labelledby="metro-h">
       <div class="metro-head">
         <h2 id="metro-h">Metronome</h2>
@@ -312,9 +324,13 @@
     <section class="panel" aria-labelledby="save-h">
       <div class="panel-head">
         <h2 id="save-h">Save it</h2>
-        <button type="button" id="midi">Save MIDI</button>
+        <div class="save-acts">
+          <button type="button" id="hum-file" hidden>Save hum as file</button>
+          <button type="button" id="midi">Save MIDI</button>
+        </div>
       </div>
       <p class="hint">A MIDI file with your melody and chords. It opens in GarageBand, Reaper, Logic, FL Studio or any other music software.</p>
+      <p class="hint" id="hum-file-hint" hidden>Your hum is also kept in <b>My hums</b> on the Hum tab. <b>Save hum as file</b> gives you a .wav of your humming that plays anywhere; open it in Surilo with <b>Upload a recording</b>, on any device, to get your notes and chords back.</p>
     </section>
   </section>
 </main>
