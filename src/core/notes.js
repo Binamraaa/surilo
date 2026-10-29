@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Turn a wobbly stream of pitch frames into a clean list of notes.
 // Pure functions — this is the module meant to be reused (e.g. hum → MIDI → Reaper).
 

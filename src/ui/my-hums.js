@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // The My hums panel on the Hum section: your earlier hums, newest first. Tap one to
 // open it as you left it; ⋯ to rename it, save it as a file, or delete it.
 // The panel only lists and asks; app.js opens, saves and deletes (see hum-store.js).

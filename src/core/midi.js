@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Minimal Standard MIDI File (format 1) writer — the bridge to a DAW (e.g. Reaper).
 // Melody on track 1, optional chords on track 2. Without a beat, time is kept in real
 // seconds at 120 BPM. With one (a quantised hum), the file carries the tempo and time

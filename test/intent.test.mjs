@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Run: node --test test/*.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';

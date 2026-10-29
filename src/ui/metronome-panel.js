@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // The Metronome card: big BPM with − / + (hold to repeat), a slider, tap tempo,
 // time signature, sound and accent toggles, and a row of beat dots. While it's
 // running and its dots have scrolled away, a small pill at the top of the screen

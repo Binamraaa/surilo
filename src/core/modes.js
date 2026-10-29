@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Modes: the seven scales around a home note, and spelling by scale degree.
 // The moods (moods.js, harmony.js) build on these for chord names; they never
 // change the melody, so nothing here rewrites notes any more.

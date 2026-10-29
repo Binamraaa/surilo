@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Notes on the grid, on the way out: the MIDI file, and the built-in samples' rhythm.
 import test from 'node:test';
 import assert from 'node:assert/strict';

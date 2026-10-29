@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Pitch detection for monophonic sources (humming, singing, whistling).
 // Pure functions, no DOM or Web Audio — runs in the browser, Node, or a worker.
 

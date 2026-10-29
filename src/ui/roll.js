@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Editable piano roll: the hummed notes as bars on a grid of semitones, with
 // your actual pitch drawn behind them so you can see where you drifted.
 //

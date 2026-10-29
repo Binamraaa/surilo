@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Bundle the app into one self-contained HTML file (dist/surilo.html),
 // plus a body-only fragment for embedding (dist/embed.html).
 // Usage: node scripts/build-single.mjs  (needs esbuild: npx esbuild or npm i -D esbuild)

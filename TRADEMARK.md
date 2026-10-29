@@ -1,10 +1,16 @@
 # The Surilo name and logo
 
-Surilo's code is open source under the MIT licence (see `LICENSE`). You're welcome to use it, change it, and build your own apps on it, free or paid.
+"Surilo" and the Surilo logo are trademarks of Binamra Bhusal.
 
-The **name "Surilo" and the Surilo logo** are not part of that licence. They identify this project, so people know which app is the original. Please:
+Surilo's code is free and open source under the GNU AGPL v3.0 (see `LICENSE`). That licence covers the code only. It doesn't give you any rights to the name or the logo.
 
-- give your fork or app its own name and icon, and
-- don't publish it in an app store, or anywhere else, in a way that suggests it's Surilo or made by Surilo's author.
+**You may** say that your project is "based on Surilo" or "a fork of Surilo". A link back is appreciated.
 
-Saying that your app is "based on Surilo", with a link back, is fine and appreciated.
+**You may not**, without written permission:
+
+- name your app, product, domain or store listing "Surilo", or anything confusingly similar, or
+- use the Surilo logo.
+
+**Forks** must use a different name and must not suggest that they're the official Surilo app.
+
+**Asking for permission:** open an issue at https://github.com/Binamraaa/surilo/issues or message me on GitHub.

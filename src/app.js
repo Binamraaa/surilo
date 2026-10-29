@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Surilo — UI wiring. All analysis lives in src/core (pure, testable, reusable).
 // (The app was called Hum to Notes; its saved settings keep their hum-to-notes.* names.)
 

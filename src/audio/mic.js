@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Live microphone capture → per-frame pitch, plus the raw recording for later.
 
 import { analyseFrame, rms } from '../core/pitch.js';

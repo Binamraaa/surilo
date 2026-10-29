@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Note-editing operations for the piano roll. Pure: every function returns a new,
 // time-sorted array and never mutates its input, so undo is just "keep the old array".
 // Notes are {midi, start, end, ...}; edited notes get `edited: true`. A note the app

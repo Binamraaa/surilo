@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Compare the notes the app found with the notes they should have been (the
 // answer key you fixed by hand), and say what kind of mistake each one is.
 // Notes are matched by how much they overlap in time, so the answer key's

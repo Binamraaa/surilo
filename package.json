@@ -11,5 +11,5 @@
     "esbuild": "^0.24.0"
   },
   "description": "Hum a melody, see the notes on guitar, piano and staff, with key and chord suggestions.",
-  "license": "MIT"
+  "license": "AGPL-3.0-only"
 }

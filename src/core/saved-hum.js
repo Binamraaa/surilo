@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // A saved hum: everything needed to pick it up again later, exactly as you left it.
 // The notes (as detected and as edited), the beat, and the chord choices, as plain
 // JSON. Pure: runs in the browser and in Node.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // WAV files: write the hum as 16-bit PCM mono (at its own sample rate, so the
 // pitch analysis of the file matches what the app did), and read PCM or float
 // WAVs back. Pure: runs in the browser and in Node.

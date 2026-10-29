@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Snapping hummed notes to the beat and writing them as note values, ties and rests.
 import test from 'node:test';
 import assert from 'node:assert/strict';

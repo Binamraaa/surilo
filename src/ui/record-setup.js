@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // The recording setup above "Start humming": hum to a beat or not, how long the
 // count-in is, and whether the phone buzzes on the beat. Saved on this device.
 //

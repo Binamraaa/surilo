@@ -113,12 +113,8 @@ scripts/real-hums.mjs      accuracy report on real test hums saved from test mod
 
 Hum on "mmm" or "doo", one note at a time, in a quiet room. Leave a tiny gap between repeated notes.
 
-## Acknowledgements
-
-Built with help from [Claude](https://claude.ai), Anthropic's AI assistant, used for coding and testing.
-
 ## License
 
-The code is MIT licensed (see `LICENSE`): use it, fork it, build on it. The name **Surilo** and its logo aren't part of that licence; see [TRADEMARK.md](TRADEMARK.md).
-
-MIT
+- **License.** Surilo is free and open source under the GNU AGPL v3.0 (see [LICENSE](LICENSE)). You may use, study, change and share it. If you distribute a modified version or run it as a website or service, you must publish your full source under the same license and keep the copyright and [NOTICE](NOTICE). Versions published before this change were under MIT; from this commit onward, AGPL-3.0 applies.
+- **Trademark.** The code is open; the name and logo are not. See [TRADEMARK.md](TRADEMARK.md).
+- **Acknowledgements.** Built with help from Claude (Anthropic) as an AI coding assistant.

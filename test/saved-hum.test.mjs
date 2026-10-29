@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Saved hums: the JSON that brings a hum back, on its own and inside a WAV file.
 import test from 'node:test';
 import assert from 'node:assert/strict';

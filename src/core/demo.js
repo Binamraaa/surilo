@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Synthesise a realistic-ish hum so the app (and the tests) can run without a mic.
 // Adds the things that make real hums hard: vibrato, scoops into notes, a slightly
 // off tuning, breathy noise, soft attacks and short gaps between notes. Optionally

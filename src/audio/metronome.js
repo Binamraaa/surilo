@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Metronome: a lookahead click scheduler (the "two clocks" pattern).
 //
 // A ~25 ms timer wakes up and books every click due in the next 100 ms on the

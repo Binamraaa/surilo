@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Real-voice report: run every test hum saved from the app's test mode through
 // the current code, and compare with the answer key inside each file.
 //

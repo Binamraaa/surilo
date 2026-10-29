@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Humming to a count-in: lining the hum up with the beat, following a singer who
 // drifts, and keeping metronome clicks out of the notes.
 import test from 'node:test';

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Moods: the same melody, harmonised in different ways. A mood is a recipe for
 // the chords underneath: which chords it uses, which moves between them it
 // likes, which colour notes it allows, how it ends and how often the chords

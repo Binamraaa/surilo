@@ -3,9 +3,9 @@
 Surilo (formerly Hum to Notes; the GitHub repo is `Binamraaa/surilo`, the local folder is still hum-to-notes) is live at https://surilo.vercel.app. It is a browser app: hum a melody, then see the notes as blocks, on a guitar fretboard, a piano and a staff, with a key guess and chord suggestions. It's a public GitHub portfolio project. It's meant for quick experimenting, not studio-grade transcription.
 
 ## Product
-- Free for everyone, open source (MIT), no ads, no account. The only money is an optional tip that unlocks nothing: **♥ Leave a tip** in About Surilo shows the maker's eSewa QR (`assets/tip-esewa.png`, cropped so the phone number isn't printed); store builds will need an in-app purchase instead (app-store payment rules).
+- Free for everyone, open source (AGPL-3.0, with a NOTICE file), no ads, no account. The only money is an optional tip that unlocks nothing: **♥ Leave a tip** in About Surilo shows the maker's eSewa QR (`assets/tip-esewa.png`, cropped so the phone number isn't printed); store builds will need an in-app purchase instead (app-store payment rules).
 - Positioning: nothing is generated. Never add features that write music for the user; the app helps them find their own notes and chords.
-- The name Surilo and the logo aren't covered by the MIT licence (TRADEMARK.md).
+- The name Surilo and the logo aren't covered by the AGPL (TRADEMARK.md). The About section links to the source code, as AGPL section 13 requires for a website: keep that link.
 - Saved settings and the test-hum format keep their old `hum-to-notes.*` / `hum-to-notes-test` names on purpose: renaming them would wipe users' settings and orphan the saved test hums.
 
 ## Stack and constraints
@@ -52,6 +52,8 @@ Surilo (formerly Hum to Notes; the GitHub repo is `Binamraaa/surilo`, the local 
 - Pitch is a float MIDI number throughout (69 = A4, middle C = C4 = 60). Notes are `{midi, pitch, cents, start, end}`, with times in seconds.
 - All colours come from CSS custom properties in `styles.css`, in light and dark sets. The light set is bright and cool; the dark set is the original. The top-bar button cycles Auto → Light → Dark (`data-theme` on `<html>`, saved as `hum-to-notes.theme`; a one-line script in `<head>` applies it before first paint). Canvas code reads colours when it draws, so redraw it after a theme change. Use `style="fill:var(--x)"` in SVG, never hard-coded colours.
 - Copy is written for beginners: plain words, no jargon without explanation.
+- License: AGPL-3.0-only. New source files get the SPDX and copyright header (`// SPDX-License-Identifier: AGPL-3.0-only` then `// Copyright (C) 2026 Binamra Bhusal`; `/* … */` in CSS).
+- Commits: never add Co-Authored-By trailers or any co-author or contributor line for Claude. Claude is credited only in the README acknowledgements.
 
 ## Accuracy baseline
 `scripts/sweep.mjs`, as of 2026-10-15 (with pitch tracking). "Any key" counts a hum as right if every note is off by the same semitone: a singer 55¢ flat throughout could have meant either key.

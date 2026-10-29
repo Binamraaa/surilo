@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Views: each returns an SVG/HTML string from plain data. No state lives here.
 
 import { midiToName } from '../core/notes.js';

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // My hums: every hum you record or upload, kept on this device (IndexedDB), with
 // the notes, the beat and the chords as you left them. Nothing leaves the device.
 //

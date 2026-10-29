@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Music theory helpers: key guess, chord suggestions, guitar fingering, staff spelling.
 
 import { midiToName } from './notes.js';

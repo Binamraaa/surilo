@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Tempo, time signatures and the beat grid. Pure: no DOM, no Web Audio.
 //
 // A "beat" here is one grid unit, and one metronome click: a quarter note in

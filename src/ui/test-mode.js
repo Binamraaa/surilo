@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Test mode: save a real hum, with the notes you fixed by hand as its answer
 // key, so scripts/real-hums.mjs can grade the app on real voices.
 //

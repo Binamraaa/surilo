@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Harmonising a melody in a mood: pick one chord per slot so that every chord
 // supports the notes sung over it and the progression moves the way the mood
 // likes. The notes are never changed. A mood only changes the chords.

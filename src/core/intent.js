@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Guess the note the singer meant, not just the nearest one to what they sang.
 //
 // Rounding to the nearest note fails when a hum lands between two notes. People

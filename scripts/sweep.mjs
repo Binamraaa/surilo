@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Stress sweep: hum hundreds of synthetic melodies and count how many come back
 // exactly note for note. Run before and after changing segmentation or note-picking.
 //

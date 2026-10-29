@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Binamra Bhusal
 // Tiny Web Audio player: plays detected notes (guitar-ish pluck or soft piano),
 // optional backing chords, or the original recording. Calls back with the playing index.
 
