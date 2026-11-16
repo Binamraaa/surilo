@@ -12,7 +12,7 @@ export const HUM_FORMAT = 'surilo-hum';
 export const HUM_VERSION = 1;
 
 // What a note keeps. Its `id` is left out: ids are handed out afresh when it's opened.
-const NOTE_KEYS = ['midi', 'pitch', 'cents', 'start', 'end', 'edited', 'adjusted', 'nearest', 'added'];
+const NOTE_KEYS = ['midi', 'pitch', 'cents', 'start', 'end', 'edited', 'adjusted', 'nearest', 'suggest', 'added'];
 
 function cleanNote(n) {
   const out = {};

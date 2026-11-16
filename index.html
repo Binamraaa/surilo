@@ -48,27 +48,53 @@
         <h2 id="capture-h">Hum a tune</h2>
         <span class="label" id="mode-label">Sample loaded</span>
       </div>
+      <button class="rec primary big" id="rec" type="button"><span class="dot"></span><span id="rec-label">Start humming</span></button>
+      <div class="beat-dots rec-dots" id="rec-dots" aria-hidden="true" hidden></div>
+      <!-- How to hum: to a beat or freely. Folded away, so the screen has one thing to press. -->
       <div class="rec-setup" id="rec-setup">
-        <div class="rec-row">
-          <span class="label">Hum to a beat</span>
+        <button type="button" class="setup-sum" id="setup-toggle" aria-expanded="false" aria-controls="setup-body">
+          <span class="label">Beat</span><span class="setup-now" id="setup-sum">Count me in · 90 BPM · 4/4</span><span class="setup-change">Change<span class="chev" aria-hidden="true"></span></span>
+        </button>
+        <div class="setup-body" id="setup-body" hidden>
           <div class="seg" role="group" aria-label="Hum to a beat" id="click-mode">
-            <button type="button" data-click="off" aria-pressed="false">Off</button>
+            <button type="button" data-click="off" aria-pressed="false">No beat</button>
             <button type="button" data-click="countin" aria-pressed="true">Count me in</button>
             <button type="button" data-click="throughout" aria-pressed="false">Keep clicking</button>
           </div>
-        </div>
-        <div class="rec-row" id="rec-beat-row">
-          <button type="button" class="tool" id="rec-tempo" aria-label="Change the tempo"></button>
-          <div class="seg" role="group" aria-label="Count-in length" id="count-in">
-            <button type="button" data-bars="1" aria-pressed="true">1 bar</button>
-            <button type="button" data-bars="2" aria-pressed="false">2 bars</button>
+          <p class="hint" id="rec-hint"></p>
+          <div class="metro" id="metro">
+            <div class="bpm-row">
+              <button type="button" class="step" id="bpm-down" aria-label="Slower">−</button>
+              <div class="bpm"><output id="bpm-val" for="bpm-slider">90</output><span class="label" id="bpm-unit">beats per minute</span></div>
+              <button type="button" class="step" id="bpm-up" aria-label="Faster">+</button>
+            </div>
+            <input type="range" id="bpm-slider" min="40" max="240" step="1" value="90" aria-label="Tempo in beats per minute">
+            <div class="metro-row">
+              <button type="button" class="tap" id="tap">Tap the beat</button>
+              <div class="seg big" role="group" aria-label="Beats in a bar" id="metro-sig">
+                <button type="button" data-sig="4/4" aria-pressed="true">4/4</button>
+                <button type="button" data-sig="3/4" aria-pressed="false">3/4</button>
+                <button type="button" data-sig="6/8" aria-pressed="false">6/8</button>
+              </div>
+            </div>
+            <div class="rec-row" id="rec-beat-row">
+              <span class="label">Count-in</span>
+              <div class="seg" role="group" aria-label="Count-in length" id="count-in">
+                <button type="button" data-bars="1" aria-pressed="true">1 bar</button>
+                <button type="button" data-bars="2" aria-pressed="false">2 bars</button>
+              </div>
+              <button type="button" class="toggle" id="rec-vibrate" aria-pressed="false" hidden>Vibrate</button>
+            </div>
+            <!-- Try the tempo out. Named for what it does, so it isn't taken for the record button. -->
+            <div class="metro-pulse">
+              <button type="button" class="metro-go" id="metro-go" aria-pressed="false">Hear this tempo</button>
+              <div class="beat-dots" id="metro-dots" aria-hidden="true"></div>
+              <button type="button" class="toggle" id="metro-accent" aria-pressed="true">Louder beat 1</button>
+            </div>
+            <p class="hint" id="metro-hint"></p>
           </div>
-          <button type="button" class="toggle" id="rec-vibrate" aria-pressed="false" hidden>Vibrate</button>
         </div>
-        <p class="hint" id="rec-hint"></p>
       </div>
-      <button class="rec primary big" id="rec" type="button"><span class="dot"></span><span id="rec-label">Start humming</span></button>
-      <div class="beat-dots rec-dots" id="rec-dots" aria-hidden="true" hidden></div>
       <div class="or-row">
         <label class="btn" for="file">Upload a recording<input type="file" id="file" accept="audio/*,.m4a,.wav,.mp3,.ogg,.webm,.aac"></label>
         <select id="sample" aria-label="Try a sample hum">
@@ -92,7 +118,7 @@
         </div>
         <div class="trace-box"><canvas class="trace" id="trace" aria-label="Pitch over time"></canvas></div>
       </div>
-      <p class="hint">Hum on "mmm" or "doo", one note at a time, in a quiet room. Pitch detection runs on your device: nothing is uploaded.</p>
+      <p class="hint" id="hum-tip">Hum on "mmm" or "doo", one note at a time, in a quiet room. What you see is what you hummed: the app never adds or changes a note. It all runs on your device: nothing is uploaded.</p>
     </section>
 
     <!-- Earlier hums, kept on this device. Hidden until there's one. -->
@@ -105,38 +131,6 @@
       <ul class="hum-list" id="hum-list"></ul>
       <button type="button" class="tool" id="hum-more" hidden></button>
       <p class="hint">Every hum you record or upload is kept here, on this device only, with your edits and chords. Tap one to pick up where you left off. Browsers can clear a site's data (Safari does after a week or so without a visit, unless Surilo is on your home screen), so use <b>Save as file</b> for hums you want to keep for good.</p>
-    </section>
-
-    <section class="panel metro" id="metro" aria-labelledby="metro-h">
-      <div class="metro-head">
-        <h2 id="metro-h">Metronome</h2>
-        <button type="button" class="metro-sum" id="metro-toggle" aria-expanded="true" aria-controls="metro-body"><span id="metro-sum">90 BPM · 4/4</span><span class="chev" aria-hidden="true"></span></button>
-      </div>
-      <div class="metro-pulse">
-        <div class="beat-dots" id="metro-dots" aria-hidden="true"></div>
-        <button type="button" class="primary metro-go" id="metro-go" aria-pressed="false">Start</button>
-      </div>
-      <div class="metro-body" id="metro-body">
-        <div class="bpm-row">
-          <button type="button" class="step" id="bpm-down" aria-label="Slower">−</button>
-          <div class="bpm"><output id="bpm-val" for="bpm-slider">90</output><span class="label" id="bpm-unit">beats per minute</span></div>
-          <button type="button" class="step" id="bpm-up" aria-label="Faster">+</button>
-        </div>
-        <input type="range" id="bpm-slider" min="40" max="240" step="1" value="90" aria-label="Tempo in beats per minute">
-        <div class="metro-row">
-          <button type="button" class="tap" id="tap">Tap the beat</button>
-          <div class="seg big" role="group" aria-label="Beats in a bar">
-            <button type="button" data-sig="4/4" aria-pressed="true">4/4</button>
-            <button type="button" data-sig="3/4" aria-pressed="false">3/4</button>
-            <button type="button" data-sig="6/8" aria-pressed="false">6/8</button>
-          </div>
-        </div>
-        <div class="metro-row">
-          <button type="button" class="toggle" id="metro-sound" aria-pressed="true">Sound</button>
-          <button type="button" class="toggle" id="metro-accent" aria-pressed="true">Louder beat 1</button>
-        </div>
-        <p class="hint" id="metro-hint"></p>
-      </div>
     </section>
 
     <section class="panel about" aria-labelledby="about-h">
@@ -238,7 +232,7 @@
         <div id="roll"></div>
         <details class="help">
           <summary>How to fix notes</summary>
-          <p class="hint">Drag a note up or down to fix a flat or sharp note, or tap it and use the buttons. A note far too high or low is usually the right note in the wrong octave: use ▲ Octave or ▼ Octave. Delete a wrong note and the notes next to it fill its gap. Drag a selected note's edges to change its length. Double-click an empty spot to add a note (press and hold on a phone). The grey line is your actual voice. Dashed notes (≈) are best guesses: you hummed between two notes, so the app picked the one that fits the tune. Tap one to check it. <b>Back to my hum</b> throws away every edit.</p>
+          <p class="hint">Drag a note up or down to fix a flat or sharp note, or tap it and use the buttons. A note far too high or low is usually the right note in the wrong octave: use ▲ Octave or ▼ Octave. Delete a wrong note and the notes next to it fill its gap. Drag a selected note's edges to change its length. Double-click an empty spot to add a note (press and hold on a phone). The grey line is your actual voice. Every note is shown as you hummed it. A dashed note (≈) landed between two notes: tap it to see the other one, and switch if that's the note you meant. <b>Back to my hum</b> throws away every edit.</p>
         </details>
       </div>
     </section>
@@ -272,7 +266,7 @@
         <h2 id="moods-h"><span class="step-n">1</span>Pick a mood</h2>
         <label class="home-pick"><span class="label">Home note</span><select id="home-key" aria-label="Home note (key)"></select></label>
       </div>
-      <p class="hint">Hear the same tune feel different. Your notes never change: a mood only changes the chords underneath. Tap ▶ to listen, then <b>Use</b> the one you like.</p>
+      <p class="hint">Hear the same tune feel different. Your notes never change: a mood only changes the chords underneath. Tap <b>▶ Hear</b> on a card, then <b>Use</b> the one you like.</p>
       <div class="scroll-x"><div class="moods" id="moods"></div></div>
     </section>
 
@@ -292,7 +286,7 @@
         <h2 id="result-h"><span class="step-n">3</span>Your chords</h2>
         <span class="label" id="prog-label"></span>
       </div>
-      <p class="hint">These are the chords you hear with <b>▶ With chords</b> and get in the MIDI file. Tap one to hear it and see why it fits.</p>
+      <p class="hint">These are the chords you hear with <b>▶ Listen</b> set to <b>+ Chords</b>, and get in the MIDI file. Tap one to hear it and see why it fits.</p>
       <div class="chords" id="progression"></div>
       <p class="why" id="chord-why" aria-live="polite"></p>
       <details class="help toolbox">
@@ -337,19 +331,22 @@
 </main>
 
 <div class="metro-mini" id="metro-mini" hidden>
-  <button type="button" class="metro-mini-bpm" id="metro-mini-show" aria-label="Show the metronome"><b id="metro-mini-bpm">90</b> BPM</button>
+  <button type="button" class="metro-mini-bpm" id="metro-mini-show" aria-label="Show the tempo settings"><b id="metro-mini-bpm">90</b> BPM</button>
   <div class="beat-dots small" id="metro-mini-dots" aria-hidden="true"></div>
-  <button type="button" class="metro-mini-stop" id="metro-mini-stop">Stop</button>
+  <button type="button" class="metro-mini-stop" id="metro-mini-stop">Stop the click</button>
 </div>
 
 <!-- Messages, shown over whichever section is open. -->
 <p class="toast" id="status" role="status" hidden></p>
 
-<!-- Playback, always in reach. -->
-<div class="player" id="player" role="group" aria-label="Playback">
-  <button type="button" class="primary" id="play-notes" data-play="notes">▶ Notes</button>
-  <button type="button" id="play-chords" data-play="chords">▶ With chords</button>
-  <button type="button" id="play-hum" data-play="hum">▶ My hum</button>
+<!-- Playback: one button, and a choice of what it plays. Hidden on the Hum section and while humming. -->
+<div class="player" id="player" role="group" aria-label="Listen back">
+  <button type="button" class="primary play-go" id="play-go">▶ Listen</button>
+  <div class="seg play-what" id="play-what" role="group" aria-label="What to listen to">
+    <button type="button" data-play="notes" aria-pressed="true">Notes</button>
+    <button type="button" data-play="chords" aria-pressed="false">+ Chords</button>
+    <button type="button" data-play="hum" aria-pressed="false">My voice</button>
+  </div>
   <button type="button" class="play-click" id="play-click" aria-pressed="false" aria-label="Click the beat under playback" title="Click the beat under playback" hidden>
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8l-2.5-17h-3z"/><path d="M12 15l5-9"/></svg>
   </button>

@@ -2,14 +2,50 @@
 // Copyright (C) 2026 Binamra Bhusal
 // Live microphone capture → per-frame pitch, plus the raw recording for later.
 
-import { analyseFrame, rms } from '../core/pitch.js';
+import { rms, createPitchStream } from '../core/pitch.js';
+
+// The audio is captured on the audio thread (an AudioWorklet), so a busy page can
+// never drop part of the hum, and handed over in small blocks (about 10 ms), so
+// the pitch line follows the voice closely. The module is inlined as a Blob: no
+// extra file to serve, and it survives the single-file build.
+const BLOCK = 512;
+const WORKLET = `
+class SuriloCapture extends AudioWorkletProcessor {
+  constructor() { super(); this.buf = new Float32Array(${BLOCK}); this.n = 0; this.first = true; }
+  process(inputs) {
+    const ch = inputs[0] && inputs[0][0];
+    if (!ch) return true;
+    if (this.first) { this.first = false; this.port.postMessage({ startedAt: currentTime }); }
+    let i = 0;
+    while (i < ch.length) {
+      const k = Math.min(ch.length - i, this.buf.length - this.n);
+      this.buf.set(ch.subarray(i, i + k), this.n);
+      this.n += k; i += k;
+      if (this.n === this.buf.length) { this.port.postMessage(this.buf.slice()); this.n = 0; }
+    }
+    return true;
+  }
+}
+registerProcessor('surilo-capture', SuriloCapture);`;
+
+const loaded = new WeakMap(); // AudioContext → promise that the capture module is in
+function captureNode(ctx) {
+  if (!ctx.audioWorklet || typeof AudioWorkletNode !== 'function') return Promise.reject(new Error('no-worklet'));
+  if (!loaded.has(ctx)) {
+    const url = URL.createObjectURL(new Blob([WORKLET], { type: 'application/javascript' }));
+    loaded.set(ctx, ctx.audioWorklet.addModule(url).finally(() => URL.revokeObjectURL(url)));
+  }
+  return loaded.get(ctx).then(() => new AudioWorkletNode(ctx, 'surilo-capture', { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1 }));
+}
 
 /**
- * Start listening. `onFrame({t, midi, hz, level, clarity})` fires ~45×/s.
- * Pass the app's AudioContext as `ctx` to share its clock with the metronome:
- * `startedAt` is then the context time of the recording's first sample, so a hum
- * can be lined up with the clicks.
- * Returns a handle with stop() → {samples, sampleRate}.
+ * Start listening. `onFrame({t, midi, hz, level, clarity, input})` fires for every
+ * analysis frame (about 86 a second). Pass the app's AudioContext as `ctx` to share
+ * its clock with the metronome: `startedAt` is then the context time of the
+ * recording's first sample, so a hum can be lined up with the clicks.
+ * Returns a handle with stop() → {samples, sampleRate, frames}: `frames` is the
+ * finished pitch analysis of the whole take (see createPitchStream), ready at once
+ * because it was worked out while you hummed.
  */
 export async function startMic(onFrame, { ctx: shared = null } = {}) {
   if (!navigator.mediaDevices?.getUserMedia) throw new Error('no-mic-api');
@@ -23,46 +59,40 @@ export async function startMic(onFrame, { ctx: shared = null } = {}) {
   const sr = ctx.sampleRate;
   let startedAt = null;
   const src = ctx.createMediaStreamSource(stream);
-  const hop = 1024;
-  const frameSize = sr > 30000 ? 2048 : 1024;
-  // ScriptProcessor is deprecated but works everywhere (incl. sandboxed pages where
-  // AudioWorklet modules can't load). Its 1024-sample callback is our hop.
-  const proc = ctx.createScriptProcessor(hop, 1, 1);
   const mute = ctx.createGain();
   mute.gain.value = 0;
-  src.connect(proc); proc.connect(mute); mute.connect(ctx.destination);
 
   const chunks = [];
   let total = 0;
-  const ring = new Float32Array(frameSize);
-  // Rolling loudness gate: sits between the room's noise and the loud end of the
-  // last few seconds, so it works for quiet laptop mics and loud phone mics alike,
-  // and doesn't break if you start humming the instant you press the button.
-  const recent = [];
-  let gate = 1e-4;
-  let n = 0;
-
-  proc.onaudioprocess = (e) => {
-    const input = e.inputBuffer.getChannelData(0);
-    const copy = new Float32Array(input);
-    // This buffer has just filled, so its first sample is one buffer back from now.
-    if (startedAt == null) startedAt = ctx.currentTime - copy.length / sr;
-    chunks.push(copy);
-    total += copy.length;
-    ring.copyWithin(0, copy.length);
-    ring.set(copy, frameSize - copy.length);
-    const t = total / sr;
-    const level = rms(copy);
-    recent.push(level);
-    if (recent.length > 150) recent.shift();
-    if (n++ % 8 === 0 && recent.length >= 8) {
-      const sorted = [...recent].sort((a, b) => a - b);
-      const noise = sorted[Math.floor(sorted.length * 0.1)];
-      const loud = sorted[Math.floor(sorted.length * 0.95)];
-      gate = Math.max(1e-4, Math.min(loud * 0.25, Math.max(noise * 2, loud * 0.08)));
-    }
-    onFrame({ ...analyseFrame(ring, sr, t - frameSize / 2 / sr, { gate }), input: level });
+  let live = true;
+  const pitch = createPitchStream(sr);
+  const take = (chunk) => {
+    if (!live) return;
+    chunks.push(chunk);
+    total += chunk.length;
+    const input = rms(chunk);
+    for (const f of pitch.push(chunk)) onFrame({ ...f, input });
   };
+
+  let node;
+  try {
+    node = await captureNode(ctx);
+    node.port.onmessage = (e) => {
+      if (e.data instanceof Float32Array) take(e.data);
+      else if (startedAt == null && e.data?.startedAt != null) startedAt = e.data.startedAt;
+    };
+  } catch {
+    // Older browsers, and sandboxed pages where worklet modules can't load: the
+    // deprecated ScriptProcessor, which runs on the page's own thread.
+    node = ctx.createScriptProcessor(1024, 1, 1);
+    node.onaudioprocess = (e) => {
+      const copy = new Float32Array(e.inputBuffer.getChannelData(0));
+      // This buffer has just filled, so its first sample is one buffer back from now.
+      if (startedAt == null) startedAt = ctx.currentTime - copy.length / sr;
+      take(copy);
+    };
+  }
+  src.connect(node); node.connect(mute); mute.connect(ctx.destination);
 
   const track = stream.getAudioTracks()[0];
   return {
@@ -71,15 +101,16 @@ export async function startMic(onFrame, { ctx: shared = null } = {}) {
     /** Context time of the first recorded sample (null until audio arrives). */
     get startedAt() { return startedAt; },
     stop() {
-      proc.onaudioprocess = null;
-      try { src.disconnect(); proc.disconnect(); } catch { /* already gone */ }
+      live = false;
+      if (node.port) node.port.onmessage = null; else node.onaudioprocess = null;
+      try { src.disconnect(); node.disconnect(); } catch { /* already gone */ }
       stream.getTracks().forEach((tr) => tr.stop());
       if (!shared) ctx.close();
       try { mute.disconnect(); } catch { /* already gone */ }
       const samples = new Float32Array(total);
       let o = 0;
       for (const c of chunks) { samples.set(c, o); o += c.length; }
-      return { samples, sampleRate: sr };
+      return { samples, sampleRate: sr, frames: pitch.finish() };
     },
   };
 }

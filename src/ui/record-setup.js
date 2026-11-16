@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 Binamra Bhusal
-// The recording setup above "Start humming": hum to a beat or not, how long the
-// count-in is, and whether the phone buzzes on the beat. Saved on this device.
+// The recording setup under "Start humming": hum to a beat or not, the tempo, how
+// long the count-in is, and whether the phone buzzes on the beat. It's folded into
+// one line ("Beat: Count me in · 90 BPM · 4/4") until opened, so the screen has one
+// button to press. Saved on this device.
 //
 //   off         no tempo: record freely (as before)
 //   countin     a bar or two of clicks, then silence while the dots keep the beat
@@ -28,7 +30,7 @@ function load() {
 
 /**
  * @param {object} o
- * @param {{bpm:number, sig:string, open():void, onChange(fn):void}} o.metro  the metronome panel (tempo and time signature)
+ * @param {{bpm:number, sig:string, stop():void, onChange(fn):void}} o.metro  the metronome panel (tempo and time signature)
  * @param {(msg:string, warn?:boolean) => void} o.say  show a message
  */
 export function createRecordSetup({ metro, say }) {
@@ -36,15 +38,22 @@ export function createRecordSetup({ metro, say }) {
   const s = load();
   const save = () => { try { localStorage.setItem(STORE, JSON.stringify(s)); } catch { /* private mode: just don't remember */ } };
 
+  let open = false; // folded away until asked for
+
   function draw() {
     document.querySelectorAll('#click-mode [data-click]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.click === s.mode)));
     document.querySelectorAll('#count-in [data-bars]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.bars) === s.bars)));
-    $('rec-beat-row').hidden = s.mode === 'off';
-    $('rec-tempo').textContent = `${metro.bpm} BPM · ${metro.sig}`;
+    // No beat: no tempo to set. (The tempo controls belong to the beat.)
+    if (s.mode === 'off') metro.stop();
+    $('metro').hidden = s.mode === 'off';
+    const names = { off: 'No beat', countin: 'Count me in', throughout: 'Keep clicking' };
+    $('setup-sum').textContent = s.mode === 'off' ? 'No beat: hum freely' : `${names[s.mode]} · ${metro.bpm} BPM · ${metro.sig}`;
+    $('setup-body').hidden = !open;
+    $('setup-toggle').setAttribute('aria-expanded', String(open));
     $('rec-vibrate').hidden = s.mode === 'off' || !canVibrate();
     $('rec-vibrate').setAttribute('aria-pressed', String(s.vibrate));
     const hints = {
-      off: '',
+      off: 'Hum freely. You can set a tempo afterwards, on the Notes tab.',
       countin: 'You hear the clicks first, then hum while the dots keep the beat. The app lines your notes up with it.',
       throughout: 'The click plays the whole time. Use headphones, or the mic hears it.',
     };
@@ -68,7 +77,7 @@ export function createRecordSetup({ metro, say }) {
     save(); draw();
   });
   $('rec-vibrate').addEventListener('click', () => { s.vibrate = !s.vibrate; save(); draw(); });
-  $('rec-tempo').addEventListener('click', () => metro.open());
+  $('setup-toggle').addEventListener('click', () => { open = !open; draw(); });
   metro.onChange(draw);
   draw();
 
@@ -76,5 +85,7 @@ export function createRecordSetup({ metro, say }) {
     get mode() { return s.mode; },
     get bars() { return s.bars; },
     get vibrate() { return s.vibrate && canVibrate(); },
+    /** Open the setup and bring it into view (the floating tempo pill does this). */
+    show() { open = true; draw(); $('rec-setup').scrollIntoView({ block: 'center' }); },
   };
 }

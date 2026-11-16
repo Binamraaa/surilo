@@ -93,8 +93,15 @@ body {
   width: min(560px, calc(100% - 24px)); display: flex; gap: 8px; padding: 8px;
   background: var(--sheet); border: 1px solid var(--rule); border-radius: 999px; box-shadow: 0 8px 28px rgb(0 0 0 / .14);
 }
-.player button { flex: 1 1 0; min-width: 0; justify-content: center; min-height: 44px; padding: 10px 8px; white-space: nowrap; }
-.player button.playing { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.player button { min-width: 0; justify-content: center; min-height: 44px; padding: 10px 8px; white-space: nowrap; }
+.player .play-go { flex: 0 0 auto; min-width: 124px; font-size: 16px; }
+.player .play-go.playing { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.player .play-what { flex: 1 1 0; min-width: 0; }
+.player .play-what button { flex: 1 1 0; }
+/* The Hum section is for humming: nothing there plays back, so nothing can be pressed by mistake. */
+body[data-view="hum"] .player, body.recording .player { display: none; }
+/* While humming, the screen is the Stop button, the beat and your pitch. Nothing else. */
+body.recording #rec-setup, body.recording .or-row, body.recording #my-hums, body.recording .about, body.recording #hum-tip { display: none; }
 
 /* Messages: a toast above the playback bar. Tap to close. */
 .toast {
@@ -145,11 +152,25 @@ details.help[open] summary::before { transform: rotate(90deg); }
 .player .play-click[aria-pressed="true"] { background: var(--accent-wash); border-color: var(--accent); color: var(--accent); }
 
 /* Humming to a beat: the setup above the record button, and the dots that keep time. */
-.rec-setup { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--rule); border-radius: 10px; background: var(--paper); }
+.rec-setup { display: grid; gap: 12px; }
+.setup-sum {
+  justify-self: start; min-height: 44px; padding: 8px 14px; gap: 10px; border-radius: 10px; background: var(--paper);
+  font: 600 14px/1.2 var(--font-body); text-align: left;
+}
+.setup-now { font-variant-numeric: tabular-nums; }
+.setup-change { display: inline-flex; align-items: center; gap: 8px; color: var(--accent); }
+.setup-change .chev { width: 7px; height: 7px; border: solid currentColor; border-width: 0 2px 2px 0; transform: rotate(45deg) translateY(-2px); transition: transform .15s; }
+.setup-sum[aria-expanded="true"] .chev { transform: rotate(-135deg) translate(-2px, 0); }
+.setup-body { display: grid; gap: 12px; padding: 12px; border: 1px solid var(--rule); border-radius: 10px; background: var(--paper); }
+.setup-body[hidden], .setup-body .metro[hidden] { display: none; }
+.setup-body .metro { display: grid; }
+.setup-body .bpm output { font-size: 48px; }
+.setup-body .step { width: 48px; height: 48px; font-size: 24px; }
+.setup-body .metro-pulse { flex-wrap: wrap; justify-content: flex-start; }
+.setup-body .metro-pulse .beat-dots { margin-right: auto; }
 .rec-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .rec-row .seg button { min-height: 40px; }
 .rec-row[hidden], .rec-setup .hint:empty { display: none; }
-#rec-tempo { min-height: 40px; font: 700 14px/1 var(--font-display); font-variant-numeric: tabular-nums; }
 .rec-dots { justify-content: center; min-height: 40px; }
 .rec-dots[hidden] { display: none; }
 .rec-dots .dot { width: 30px; height: 30px; }
@@ -175,6 +196,13 @@ button.rec.big { min-height: 58px; font-size: 17px; justify-content: center; jus
   .tabs svg { width: 22px; height: 22px; }
   .player { bottom: calc(var(--tabbar-h) + 8px + env(safe-area-inset-bottom, 0px)); border-radius: 16px; }
   .player button { font-size: 14px; padding: 10px 4px; }
+  .player { gap: 6px; padding: 6px; }
+  .player .play-go { min-width: 96px; font-size: 15px; padding: 10px 12px; }
+  .player .play-what { padding: 3px; gap: 0; }
+  .player .play-what button { font-size: 12.5px; padding: 8px 4px; min-height: 38px; letter-spacing: -0.01em; }
+  .player .play-click { flex-basis: 42px; }
+  .setup-sum { justify-self: stretch; }
+  .setup-change { margin-left: auto; }
   .toast { bottom: calc(var(--tabbar-h) + var(--player-h) + 20px + env(safe-area-inset-bottom, 0px)); }
   .wrap { padding: 12px 12px calc(var(--tabbar-h) + var(--player-h) + 36px + env(safe-area-inset-bottom, 0px)); }
   .view { gap: 12px; }
@@ -201,13 +229,8 @@ button.rec.big { min-height: 58px; font-size: 17px; justify-content: center; jus
 
 /* ---- Metronome ---- */
 .metro { gap: 12px; }
-.metro-head { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
-.metro-head h2 { margin-right: auto; }
-.metro-sum { min-height: 44px; font: 700 16px/1 var(--font-display); font-variant-numeric: tabular-nums; }
-.metro-sum .chev { width: 8px; height: 8px; border: solid var(--ink-soft); border-width: 0 2px 2px 0; transform: rotate(45deg) translateY(-2px); transition: transform .15s; }
-.metro-sum[aria-expanded="true"] .chev { transform: rotate(-135deg) translate(-2px, 0); }
 .metro-pulse { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.metro-go { min-height: 44px; min-width: 88px; justify-content: center; }
+.metro-go { min-height: 44px; min-width: 150px; justify-content: center; }
 .metro.running .metro-go { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 .beat-dots { display: flex; align-items: center; gap: 10px; min-height: 26px; }
 .beat-dots .dot { width: 24px; height: 24px; border-radius: 50%; background: var(--rule); flex: none; }
@@ -215,8 +238,6 @@ button.rec.big { min-height: 58px; font-size: 17px; justify-content: center; jus
 .beat-dots .dot.group { margin-left: 12px; }
 .beat-dots .dot.on { background: var(--ink); }
 .beat-dots .dot.first.on { background: var(--accent); }
-.metro-body { display: grid; gap: 14px; }
-.metro-body[hidden] { display: none; }
 .bpm-row { display: flex; align-items: center; justify-content: center; gap: 18px; }
 .bpm { display: grid; justify-items: center; gap: 2px; min-width: 4.2ch; }
 .bpm output { font: 700 72px/0.95 var(--font-display); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
@@ -231,7 +252,6 @@ button.rec.big { min-height: 58px; font-size: 17px; justify-content: center; jus
 .toggle[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-wash); }
 .toggle[aria-pressed="true"]::before { background: var(--accent); border-color: var(--accent); }
 @media (max-width: 720px) {
-  .bpm output { font-size: 84px; }
   .metro-row { flex-wrap: nowrap; gap: 8px; }
   .metro-row .tap { flex: 1 1 0; min-width: 0; padding: 11px 8px; }
   .seg.big button { min-width: 46px; padding: 8px 10px; }

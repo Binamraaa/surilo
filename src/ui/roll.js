@@ -132,7 +132,7 @@ export function createRoll(root, h) {
       const fill = sel ? 'var(--accent)' : 'var(--accent-wash)';
       const stroke = n.edited ? 'var(--warm)' : 'var(--accent)';
       g += `<g class="note" data-i="${i}">
-        <rect x="${x}" y="${y}" width="${w}" height="${ROW - 2}" rx="3" style="fill:${fill};stroke:${stroke}" stroke-width="${sel || n.edited || n.adjusted ? 2 : 1.2}"${n.adjusted ? ' stroke-dasharray="4 3"' : ''}/>
+        <rect x="${x}" y="${y}" width="${w}" height="${ROW - 2}" rx="3" style="fill:${fill};stroke:${stroke}" stroke-width="${sel || n.edited || n.adjusted || n.suggest != null ? 2 : 1.2}"${n.adjusted || n.suggest != null ? ' stroke-dasharray="4 3"' : ''}/>
         ${w > 30 ? `<text x="${x + 5}" y="${y + ROW / 2 + 4}" font-size="${ROW > 20 ? 13 : 11}" font-weight="700" style="fill:${sel ? 'var(--accent-ink)' : 'var(--accent)'}" pointer-events="none">${esc(midiToName(n.midi, { flats }))}</text>` : ''}
         ${off && w > 64 ? `<text x="${x + w - 4}" y="${y + ROW / 2 + 4}" text-anchor="end" font-size="9" style="fill:var(--warm)" pointer-events="none">${n.cents > 0 ? '+' : '−'}${Math.abs(n.cents)}¢</text>` : ''}
         ${sel ? `<rect x="${x}" y="${y}" width="4" height="${ROW - 2}" style="fill:var(--accent-ink)" opacity=".7" pointer-events="none"/><rect x="${x + w - 4}" y="${y}" width="4" height="${ROW - 2}" style="fill:var(--accent-ink)" opacity=".7" pointer-events="none"/>` : ''}

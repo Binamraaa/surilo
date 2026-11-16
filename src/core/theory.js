@@ -197,15 +197,27 @@ export function chordsWithNote(midi, key) {
 }
 
 /**
- * MIDI notes for playing a chord out loud: root position with the root between
+ * MIDI notes for playing a chord out loud: the root between
  * E3 and D♯4 (where laptop and phone speakers still sound full), plus a bass note
  * an octave lower: the root, or a slash chord's own bass (B♭/C → C).
  */
 export function voiceChord(chord, { bass = true } = {}) {
   const slash = chord.bass != null && chord.bass !== chord.root;
   const root = 52 + (((chord.root % 12) - 4 + 12) % 12);
-  const tones = slash ? chord.tones.filter((pc) => pc !== chord.bass) : chord.tones;
-  const notes = tones.map((pc) => root + ((pc - (root % 12) + 12) % 12)).sort((a, b) => a - b);
+  let ivs = chord.tones.filter((pc) => !slash || pc !== chord.bass).map((pc) => (pc - (root % 12) + 12) % 12);
+  // Chords with a 7th and more: the extensions go on top (a 9th above the 3rd, not a
+  // 2nd squeezed beside the root), and five-note chords drop their plain 5th.
+  const seventh = ivs.includes(10) || ivs.includes(11);
+  const third = ivs.includes(3) || ivs.includes(4);
+  if (ivs.length >= 5 && ivs.includes(7)) ivs = ivs.filter((iv) => iv !== 7);
+  const lift = (iv) => {
+    if (!third) return iv;                                        // sus chords keep their 2nd or 4th inside
+    if (iv === 1 || iv === 2) return iv + 12;                     // ♭9, 9
+    if (iv === 3 && ivs.includes(4)) return 15;                   // ♯9, over the major 3rd
+    if (seventh && (iv === 5 || iv === 6 || iv === 9)) return iv + 12; // 11, ♯11, 13
+    return iv;
+  };
+  const notes = ivs.map(lift).map((iv) => (root + iv > 79 ? root + iv - 12 : root + iv)).sort((a, b) => a - b);
   const low = slash ? 40 + ((chord.bass - 4 + 12) % 12) : root - 12;
   return bass ? [low, ...notes] : notes;
 }

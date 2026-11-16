@@ -2,9 +2,11 @@
 // Copyright (C) 2026 Binamra Bhusal
 // Note-editing operations for the piano roll. Pure: every function returns a new,
 // time-sorted array and never mutates its input, so undo is just "keep the old array".
-// Notes are {midi, start, end, ...}; edited notes get `edited: true`. A note the app
-// moved to the one you probably meant has `adjusted: true` and keeps `nearest`.
-// Changing its pitch by hand settles it, so it's no longer marked.
+// Notes are {midi, start, end, ...}; edited notes get `edited: true`. A note hummed
+// between two notes may carry `suggest`: the other note, which fits the tune better.
+// It is only ever applied by the user (useSuggestion), and changing the pitch by hand
+// drops it. (Hums saved by older versions have `adjusted: true` + `nearest` instead:
+// there the app had already moved the note, and resolveGuess keeps it or puts it back.)
 
 export const MIN_LEN = 0.06; // seconds — shorter than this isn't a playable note
 
@@ -19,16 +21,19 @@ export function withIds(notes) {
 const sortNotes = (notes) => [...notes].sort((a, b) => a.start - b.start || a.midi - b.midi);
 const clampMidi = (m) => Math.max(21, Math.min(108, m)); // piano range A0–C8
 
+/** A note whose pitch the user has decided: no suggestion is left hanging on it. */
+const settle = ({ suggest, ...n }) => n;
+
 /** Change pitch by `semis` (±1 = semitone, ±12 = octave). */
 export function transpose(notes, i, semis) {
   if (!notes[i] || !semis) return notes;
-  return notes.map((n, j) => (j === i ? { ...n, midi: clampMidi(n.midi + semis), edited: true, adjusted: false } : n));
+  return notes.map((n, j) => (j === i ? settle({ ...n, midi: clampMidi(n.midi + semis), edited: true, adjusted: false }) : n));
 }
 
 /** Set an absolute pitch. */
 export function setPitch(notes, i, midi) {
   if (!notes[i] || notes[i].midi === midi) return notes;
-  return notes.map((n, j) => (j === i ? { ...n, midi: clampMidi(midi), edited: true, adjusted: false } : n));
+  return notes.map((n, j) => (j === i ? settle({ ...n, midi: clampMidi(midi), edited: true, adjusted: false }) : n));
 }
 
 /**
@@ -41,6 +46,20 @@ export function resolveGuess(notes, i, keep) {
   return notes.map((m, j) => {
     if (j !== i) return m;
     return keep ? { ...m, adjusted: false } : { ...m, midi: m.nearest, cents: m.cents + (m.midi - m.nearest) * 100, adjusted: false, edited: true };
+  });
+}
+
+/**
+ * Take the app's suggestion for a note hummed between two: move it to the note
+ * that fits the tune. `keep: true` keeps the note as hummed and drops the suggestion.
+ */
+export function useSuggestion(notes, i, keep = false) {
+  const n = notes[i];
+  if (n?.suggest == null) return notes;
+  return notes.map((m, j) => {
+    if (j !== i) return m;
+    const { suggest, ...rest } = m;
+    return keep ? rest : { ...rest, midi: suggest, cents: (m.cents ?? 0) + (m.midi - suggest) * 100, edited: true };
   });
 }
 

@@ -38,10 +38,10 @@ export function blocksView({ notes, fingering, chordsAt, flats, instrument, acti
       : val ? val.words.replace(' note', '').replace(' tied to ', ' + ') : `${dur.toFixed(2)} s`;
     const chord = chordsAt.get(i);
     const off = !n.edited && Math.abs(n.cents) >= 20 ? `<span class="off" title="You hummed ${Math.abs(n.cents)} cents ${n.cents > 0 ? 'sharp' : 'flat'}">${n.cents > 0 ? '+' : '−'}${Math.abs(n.cents)}¢</span>` : '';
-    const cls = ['block', i === active ? 'active' : '', i === selected ? 'sel' : '', n.adjusted ? 'guess' : ''].join(' ');
-    const guess = n.adjusted ? `<span class="guess-mark" title="You hummed between two notes; this is the one that fits the tune">≈</span>` : '';
+    const cls = ['block', i === active ? 'active' : '', i === selected ? 'sel' : '', n.adjusted || n.suggest != null ? 'guess' : ''].join(' ');
+    const guess = n.adjusted || n.suggest != null ? `<span class="guess-mark" title="You hummed this one between two notes. Tap it to see the other.">≈</span>` : '';
     const valTag = val ? `<span class="val" title="${val.words}">${val.glyph}</span>` : '';
-    return `<div class="${cls}" data-i="${i}" role="button" tabindex="0" style="width:${w}px" aria-label="Note ${i + 1}: ${letter}${octave}${val ? `, ${val.words}` : ''}${n.adjusted ? ', best guess' : ''}">${guess}${valTag}
+    return `<div class="${cls}" data-i="${i}" role="button" tabindex="0" style="width:${w}px" aria-label="Note ${i + 1}: ${letter}${octave}${val ? `, ${val.words}` : ''}${n.adjusted || n.suggest != null ? ', hummed between two notes' : ''}">${guess}${valTag}
       ${chord ? `<span class="chord">${esc(chord.name)}</span>` : ''}
       <span class="n">${letter}<sub>${octave}</sub></span><span class="f">${sub}</span>${off}</div>`;
   }).join('');

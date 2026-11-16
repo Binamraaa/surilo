@@ -36,8 +36,12 @@ export function downsample2(frame) {
  *   clarity is 1 − the normalised difference at the chosen lag (1 = perfectly periodic).
  */
 export function yin(frame, sampleRate, opts = {}) {
-  const { minHz = 65, maxHz = 1050, threshold = 0.15 } = opts;
-  const c = cmndOf(frame, sampleRate, minHz, maxHz);
+  const { minHz = 65, maxHz = 1050 } = opts;
+  return pickYin(cmndOf(frame, sampleRate, minHz, maxHz), sampleRate, opts);
+}
+
+/** YIN steps 4–5 on a ready difference function (see cmndOf). */
+function pickYin(c, sampleRate, { minHz = 65, maxHz = 1050, threshold = 0.15 } = {}) {
   if (!c) return null;
   const { cmnd, tauMin, tauMax } = c;
 
@@ -110,8 +114,11 @@ const THRESHOLDS = (() => {
  * @returns {Array<{hz:number, cmnd:number, p:number}>} most likely first
  */
 export function yinCandidates(frame, sampleRate, opts = {}) {
-  const { minHz = 65, maxHz = 1050, octaveRatio = 0.4 } = opts;
-  const c = cmndOf(frame, sampleRate, minHz, maxHz);
+  const { minHz = 65, maxHz = 1050 } = opts;
+  return candidatesOf(cmndOf(frame, sampleRate, minHz, maxHz), sampleRate, opts);
+}
+
+function candidatesOf(c, sampleRate, { minHz = 65, maxHz = 1050, octaveRatio = 0.4 } = {}) {
   if (!c) return [];
   const { cmnd, tauMin, tauMax } = c;
   const dips = [];
@@ -230,42 +237,108 @@ export function analyseBuffer(samples, sampleRate, opts = {}) {
   const hop = opts.hop ?? Math.round(sampleRate * 0.0116);
   // Adapt the loudness gate to the recording: phones vary a lot in input gain.
   const gate = opts.gate ?? adaptiveGate(samples, frameSize, hop);
-  const frames = [];
   if (opts.track === false) {
+    const frames = [];
     for (let start = 0; start + frameSize <= samples.length; start += hop) {
       const frame = samples.subarray(start, start + frameSize);
       frames.push(analyseFrame(frame, sampleRate, (start + frameSize / 2) / sampleRate, { ...opts, gate }));
     }
     return frames;
   }
-  const { minClarity = 0.65 } = opts;
+  // Knowing the gate up front, silent frames are skipped instead of analysed.
+  const stream = createPitchStream(sampleRate, { ...opts, frameSize, hop, skipBelow: gate, live: false });
+  stream.push(samples);
+  return stream.finish({ gate });
+}
+
+/**
+ * The same analysis, fed a piece at a time while the hum is still being recorded.
+ * `push(samples)` returns the new frames straight away, each with plain YIN's answer
+ * (what the live view draws). Every frame's candidate pitches are kept as it goes, so
+ * `finish()` only has to pick the smooth line through them: the result is exactly what
+ * analyseBuffer gives for the whole recording, without analysing it a second time.
+ * @returns {{push(samples:Float32Array): Array, finish(o?:{gate?:number}): Array, hop:number, frameSize:number, count:number}}
+ */
+export function createPitchStream(sampleRate, opts = {}) {
+  const frameSize = opts.frameSize ?? nextPow2(sampleRate * 0.046);
+  const hop = opts.hop ?? Math.round(sampleRate * 0.0116);
+  const { minHz = 65, maxHz = 1050, minClarity = 0.65, skipBelow = 1e-4, live = true } = opts;
   const half = sampleRate > 30000;
   const sr = half ? sampleRate / 2 : sampleRate;
-  const cands = [];
-  for (let start = 0; start + frameSize <= samples.length; start += hop) {
-    const frame = samples.subarray(start, start + frameSize);
-    const level = rms(frame);
-    frames.push({ t: (start + frameSize / 2) / sampleRate, midi: null, level, clarity: 0 });
-    const c = level < gate ? [] : yinCandidates(half ? downsample2(frame) : frame, sr, opts);
-    cands.push(c.length ? c.map((x) => ({ ...x, midi: hzToMidi(x.hz) })) : null);
-  }
-  // A hum stays within a fairly narrow range. When a frame could be either of
-  // two pitches an octave apart, lean towards the one nearer the middle of this
-  // hum. A pitch with no rival is unaffected (the chances are relative).
-  const { rangeSemis = 9, rangeWeight = 0.5 } = opts;
-  const tops = cands.filter(Boolean).map((c) => c[0].midi).sort((a, b) => a - b);
-  if (tops.length && rangeWeight > 0) {
-    const centre = tops[tops.length >> 1];
-    for (const c of cands) if (c) for (const x of c) x.p *= Math.exp(-rangeWeight * Math.max(0, Math.abs(x.midi - centre) - rangeSemis));
-  }
-  const pick = trackPitch(cands, opts);
-  frames.forEach((f, i) => {
-    const c = pick[i] >= 0 && cands[i][pick[i]];
-    if (!c) return;
-    f.clarity = Math.max(0, Math.min(1, 1 - c.cmnd));
-    if (f.clarity >= minClarity) { f.midi = c.midi; f.hz = c.hz; }
-  });
-  return frames;
+  const levels = [];  // each frame's loudness
+  const cands = [];   // each frame's candidate pitches (null when it was too quiet to analyse)
+  let carry = new Float32Array(frameSize * 4);
+  let have = 0;       // samples waiting in carry
+  let liveGate = skipBelow;
+
+  const push = (samples) => {
+    if (have + samples.length > carry.length) {
+      const bigger = new Float32Array(Math.max(carry.length * 2, have + samples.length));
+      bigger.set(carry.subarray(0, have));
+      carry = bigger;
+    }
+    carry.set(samples, have);
+    have += samples.length;
+    const out = [];
+    let pos = 0;
+    for (; pos + frameSize <= have; pos += hop) {
+      const frame = carry.subarray(pos, pos + frameSize);
+      const i = levels.length;
+      const level = rms(frame);
+      levels.push(level);
+      const c = level < skipBelow ? null : cmndOf(half ? downsample2(frame) : frame, sr, minHz, maxHz);
+      const list = c ? candidatesOf(c, sr, opts) : [];
+      cands.push(list.length ? list.map((x) => ({ ...x, midi: hzToMidi(x.hz) })) : null);
+      if (!live) continue;
+      // The live gate sits between the room's noise and the loud end of the last few
+      // seconds, so it works for quiet laptop mics and loud phone mics alike.
+      if (i % 16 === 0 && i >= 16) {
+        const recent = levels.slice(-260).sort((x, y) => x - y);
+        const noise = recent[Math.floor(recent.length * 0.1)];
+        const loud = recent[Math.floor(recent.length * 0.95)];
+        liveGate = Math.max(1e-4, Math.min(loud * 0.25, Math.max(noise * 2, loud * 0.08)));
+      }
+      const t = (i * hop + frameSize / 2) / sampleRate;
+      const y = level < liveGate ? null : pickYin(c, sr, opts);
+      out.push(y && y.clarity >= minClarity
+        ? { t, midi: hzToMidi(y.hz), hz: y.hz, level, clarity: y.clarity }
+        : { t, midi: null, level, clarity: y ? y.clarity : 0 });
+    }
+    carry.copyWithin(0, pos, have);
+    have -= pos;
+    return out;
+  };
+
+  const finish = ({ gate = null } = {}) => {
+    // The same gate analyseBuffer uses: every other frame's level, over the whole hum.
+    let g = gate;
+    if (g == null) {
+      const ls = levels.filter((_, i) => i % 2 === 0).sort((x, y) => x - y);
+      const noise = ls[Math.floor(ls.length * 0.1)], loud = ls[Math.floor(ls.length * 0.95)];
+      g = ls.length ? Math.max(1e-4, Math.min(loud * 0.25, Math.max(noise * 2, loud * 0.08))) : 1e-4;
+    }
+    const frames = levels.map((level, i) => ({ t: (i * hop + frameSize / 2) / sampleRate, midi: null, level, clarity: 0 }));
+    const cs = cands.map((c, i) => (c && levels[i] >= g ? c.map((x) => ({ ...x })) : null));
+    // A hum stays within a fairly narrow range. When a frame could be either of
+    // two pitches an octave apart, lean towards the one nearer the middle of this
+    // hum. A pitch with no rival is unaffected (the chances are relative).
+    const { rangeSemis = 9, rangeWeight = 0.5 } = opts;
+    const tops = cs.filter(Boolean).map((c) => c[0].midi).sort((x, y) => x - y);
+    if (tops.length && rangeWeight > 0) {
+      const centre = tops[tops.length >> 1];
+      for (const c of cs) if (c) for (const x of c) x.p *= Math.exp(-rangeWeight * Math.max(0, Math.abs(x.midi - centre) - rangeSemis));
+    }
+    const pick = trackPitch(cs, opts);
+    frames.forEach((f, i) => {
+      const c = pick[i] >= 0 && cs[i][pick[i]];
+      if (!c) return;
+      f.clarity = Math.max(0, Math.min(1, 1 - c.cmnd));
+      if (f.clarity >= minClarity) { f.midi = c.midi; f.hz = c.hz; }
+    });
+    return frames;
+  };
+
+  return { push, finish, hop, frameSize, get count() { return levels.length; } };
 }
 
 /**

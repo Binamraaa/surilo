@@ -70,20 +70,33 @@ export function estimateTuningOffset(frames, minCount = 5) {
  * @param {number} [opts.mergeGapMs=0]    join same-pitch notes split by a dropout shorter than this
  * @param {number} [opts.dipRatio=0.45]   a loudness dip below this × the note's peak…
  * @param {number} [opts.riseRatio=0.75]  …followed by a rise above this re-articulates (repeated notes: "mm-mm")
+ * @param {number} [opts.attack=0.25]     the share of a note's start ignored when reading its pitch
+ * @param {number} [opts.blipRatio=0.4]   a note quieter than this × the typical note…
+ * @param {number} [opts.blipMs=200]      …and shorter than this is a stray sound, not a hummed note
  * @param {boolean} [opts.autoTune=true]  snap relative to the singer's own tuning
+ * @param {boolean} [opts.open=false]     the hum is still going: keep the last note even if it's still short
  * @param {Array<[number, number]>} [opts.mask]  time windows (s, sorted) where a metronome click may
  *   leak into the mic: frames there still count towards a note, but can't start one
  * @returns {{notes: Array<{midi:number, start:number, end:number, cents:number, pitch:number}>, tuning:number}}
  *   midi = snapped integer note; pitch = raw median pitch; cents = how far off the hum was.
  */
 export function framesToNotes(frames, opts = {}) {
+  return snapNotes(dropBlips(segmentNotes(frames, opts), opts), opts);
+}
+
+/**
+ * The segmentation itself: stretches of steady pitch, each with its raw pitch and
+ * its loudest level. Nothing is rounded to a note yet.
+ * @returns {Array<{pitch:number, start:number, end:number, peak:number}>}
+ */
+export function segmentNotes(frames, opts = {}) {
   const {
     minNoteMs = 90, maxGapMs = 70, changeSemis = 0.6, changeMs = 80,
-    mergeGapMs = 0, autoTune = true, smoothRadius = 2, dipRatio = 0.45, riseRatio = 0.75, mask = null,
+    smoothRadius = 2, dipRatio = 0.45, riseRatio = 0.75, mask = null, attack = 0.25, open = false,
   } = opts;
-  if (frames.length < 2) return { notes: [], tuning: 0 };
+  if (frames.length < 2) return [];
 
-  const hop = (frames[frames.length - 1].t - frames[0].t) / (frames.length - 1) || 0.0116;
+  const hop = opts.hop ?? ((frames[frames.length - 1].t - frames[0].t) / (frames.length - 1) || 0.0116);
   const maxGap = Math.max(1, Math.round(maxGapMs / 1000 / hop));
   const changeRun = Math.max(2, Math.round(changeMs / 1000 / hop));
 
@@ -150,16 +163,36 @@ export function framesToNotes(frames, opts = {}) {
       }
     }
   }
+  // Still sounding when the frames ran out (only possible while the hum is going on).
+  const sounding = !!cur;
   if (cur) { if (pending.length) cur.frames.push(...pending); close(); }
 
   // Ignore the attack (first ~25%) when deciding pitch: hums often scoop up into a note.
-  const raw = segments
-    .map((seg) => {
-      const body = seg.length > 6 ? seg.slice(Math.floor(seg.length * 0.25)) : seg;
-      return { pitch: median(body.map((f) => f.midi)), start: seg[0].t - hop / 2, end: seg[seg.length - 1].t + hop / 2 };
+  return segments
+    .map((seg, k) => {
+      const body = seg.length > 6 ? seg.slice(Math.floor(seg.length * attack)) : seg;
+      return {
+        pitch: median(body.map((f) => f.midi)), start: seg[0].t - hop / 2, end: seg[seg.length - 1].t + hop / 2,
+        peak: Math.max(...seg.map((f) => f.level ?? 0)),
+        ...(open && sounding && k === segments.length - 1 && { open: true }),
+      };
     })
-    .filter((n) => (n.end - n.start) * 1000 >= minNoteMs);
+    .filter((n) => n.open || (n.end - n.start) * 1000 >= minNoteMs);
+}
 
+/**
+ * Drop stray sounds: a short note far quieter than the hum's typical note is a
+ * breath, a click of the tongue or a bump on the mic, not something that was hummed.
+ */
+export function dropBlips(raw, { blipRatio = 0.4, blipMs = 200 } = {}) {
+  if (raw.length < 4 || blipRatio <= 0) return raw;
+  const typical = median(raw.map((n) => n.peak ?? 0));
+  if (!(typical > 0)) return raw;
+  return raw.filter((n) => n.open || (n.peak ?? typical) >= blipRatio * typical || (n.end - n.start) * 1000 >= blipMs);
+}
+
+/** Round segmented notes to semitones, relative to the singer's overall tuning. */
+function snapNotes(raw, { autoTune = true, mergeGapMs = 0 } = {}) {
   // Estimate the singer's tuning from note centres (stable) rather than raw frames (vibrato).
   const tuning = autoTune ? estimateTuningOffset(raw.map((n) => ({ midi: n.pitch })), 3) : 0;
 
@@ -178,6 +211,40 @@ export function framesToNotes(frames, opts = {}) {
     } else merged.push({ ...n });
   }
   return { notes: merged, tuning };
+}
+
+/**
+ * Notes while the hum is still going on, without redoing the whole hum on every
+ * frame. Silence longer than a note gap is a clean break: everything before the
+ * last such break is settled and kept, and only the stretch after it is segmented
+ * again. The result is what framesToNotes gives for the same frames, plus the
+ * note being sung right now, shown as soon as it has two frames.
+ * @returns {{update(frames:Array): {notes:Array, tuning:number}, reset():void}}
+ */
+export function createLiveNotes(opts = {}) {
+  let settled = [];  // segments before the last clean break
+  let from = 0;      // index of the first frame not yet settled
+  return {
+    reset() { settled = []; from = 0; },
+    update(frames) {
+      if (frames.length < from) { settled = []; from = 0; }
+      const hop = frames.length > 1 ? (frames[frames.length - 1].t - frames[0].t) / (frames.length - 1) : 0.0116;
+      const maxGap = Math.max(1, Math.round((opts.maxGapMs ?? 70) / 1000 / hop));
+      // The last silence long enough to end a note, leaving the newest second open.
+      const stop = frames.length - Math.max(maxGap + 2, Math.round(1 / hop));
+      let cut = -1, run = 0;
+      for (let i = from; i < stop; i++) {
+        run = frames[i].midi == null ? run + 1 : 0;
+        if (run > maxGap) cut = i + 1;
+      }
+      if (cut > from) {
+        settled.push(...segmentNotes(frames.slice(from, cut), { ...opts, hop }));
+        from = cut;
+      }
+      const raw = [...settled, ...segmentNotes(frames.slice(from), { ...opts, hop, open: true })];
+      return snapNotes(dropBlips(raw, opts), opts);
+    },
+  };
 }
 
 /**

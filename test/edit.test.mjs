@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  transpose, setPitch, reshape, moveNote, deleteNote, addNote, splitNote, mergeWithNext, resolveGuess, indexOfId, withIds, createHistory, MIN_LEN,
+  transpose, setPitch, reshape, moveNote, deleteNote, addNote, splitNote, mergeWithNext, resolveGuess, useSuggestion, indexOfId, withIds, createHistory, MIN_LEN,
 } from '../src/core/edit.js';
 import { toMidiFile } from '../src/core/midi.js';
 
@@ -103,4 +103,16 @@ test('a best-guess note can be kept, put back, or settled by editing it', () => 
   assert.equal(resolveGuess(guessed, 0, true), guessed, 'notes that were not guessed are left alone');
   assert.equal(transpose(guessed, 1, 2)[1].adjusted, false);
   assert.equal(guessed[1].adjusted, true);
+});
+
+test('a suggestion is only applied when asked, and editing the pitch drops it', () => {
+  // Sung 46 cents below F♯: shown as F♯, with F (which fits the key) on offer.
+  const hummed = [{ midi: 60, start: 0, end: 0.5 }, { midi: 66, suggest: 65, cents: -46, start: 0.6, end: 1 }];
+  const used = useSuggestion(hummed, 1);
+  assert.deepEqual([used[1].midi, used[1].cents, used[1].edited, 'suggest' in used[1]], [65, 54, true, false]);
+  const kept = useSuggestion(hummed, 1, true);
+  assert.deepEqual([kept[1].midi, kept[1].edited, 'suggest' in kept[1]], [66, undefined, false]);
+  assert.equal('suggest' in transpose(hummed, 1, 1)[1], false);
+  assert.equal(useSuggestion(hummed, 0), hummed, 'nothing to do for a note with no suggestion');
+  assert.equal(hummed[1].suggest, 65, 'the original is untouched');
 });

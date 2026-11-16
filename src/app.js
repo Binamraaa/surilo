@@ -4,13 +4,13 @@
 // (The app was called Hum to Notes; its saved settings keep their hum-to-notes.* names.)
 
 import { analyseBuffer, levelStats } from './core/pitch.js';
-import { midiToName, centsOff } from './core/notes.js';
-import { transcribe } from './core/intent.js';
+import { midiToName, centsOff, createLiveNotes } from './core/notes.js';
+import { transcribe, finishNotes } from './core/intent.js';
 import { guessKey, keyName, keyUsesFlats, phraseSlots, fingerMelody, chordsWithNote, voiceChord } from './core/theory.js';
 import { synthHum, DEMO_MELODIES, DEMO_TIMING } from './core/demo.js';
 import { toMidiFile } from './core/midi.js';
 import {
-  withIds, transpose, reshape, deleteNote, addNote, splitNote, mergeWithNext, resolveGuess, indexOfId, createHistory,
+  withIds, transpose, reshape, deleteNote, addNote, splitNote, mergeWithNext, resolveGuess, useSuggestion, indexOfId, createHistory,
 } from './core/edit.js';
 import { startMic, decodeFile } from './audio/mic.js';
 import { playNotes, playOnce, playRecording, stopPlayback, getCtx } from './audio/synth.js';
@@ -30,18 +30,6 @@ import { createMyHums } from './ui/my-hums.js';
 
 const $ = (id) => document.getElementById(id);
 const inArtifact = typeof window.claude === 'object' && window.claude !== null;
-
-// How far the tune's key may overrule this singer's pitch when picking the note they
-// meant. Learnt from their Keep / Use answers, and kept on this device only.
-const TRUST_KEY = 'hum-to-notes.trust';
-function loadTrust() {
-  try { const v = Number(localStorage.getItem(TRUST_KEY)); return v > 0 ? v : 1; } catch { return 1; }
-}
-function learnFromAnswer(kept) {
-  // "Use the other note" is a clear signal; "keep" is often just agreeing, so it counts for less.
-  state.trust = kept ? Math.min(1.5, state.trust + 0.05) : Math.max(0.25, state.trust - 0.15);
-  try { localStorage.setItem(TRUST_KEY, String(state.trust)); } catch { /* private mode: just don't remember */ }
-}
 
 const state = {
   frames: [],        // raw pitch frames from the last analysis
@@ -67,7 +55,6 @@ const state = {
   chordTones: [],    // pitch classes of a tapped chord (piano highlight)
   playhead: null,
   mic: null,
-  trust: loadTrust(),
   moodId: null,      // mood the user picked (null = automatic: Bright in a major key, Dark in minor)
   homeKey: null,     // home key the user picked ({tonic, mode}); null = the guessed key
   journeyId: 'steady', // a preset from JOURNEYS, or 'custom' after editing the mood strip
@@ -75,7 +62,9 @@ const state = {
   stripSel: null,    // the part selected on the mood strip
   versions: {},      // which variation ("Try another version") each mood, or 'journey', is showing
   playingProg: null, // the chords being played, so the keyboard can follow them
-  playing: null,     // which playback button is playing: 'notes', 'chords', 'hum' (or 'card')
+  playing: null,     // what is playing: 'notes', 'chords', 'hum' or 'card' (a mood card's ▶ Hear)
+  playKind: 'notes', // what ▶ Listen plays: 'notes', 'chords' or 'hum'
+  playingCard: null, // the mood whose card is playing
   humId: null,       // this hum's id in My hums (null: not kept, e.g. a sample)
   humName: null,
   humCreated: null,
@@ -100,7 +89,7 @@ function followTempo(tempo, notes) {
 }
 
 function setAnalysis({ frames, recording, mask = null, tempo = null }) {
-  const { notes, tuning } = transcribe(frames, { trust: state.trust, mask });
+  const { notes, tuning } = transcribe(frames, { mask });
   // Hummed to a beat: where each note sits in the bar, following the singer's own tempo.
   state.tempo = tempo ? followTempo(tempo, notes) : null;
   if (state.tempo) {
@@ -220,18 +209,32 @@ function beatLines() {
   return lines;
 }
 
-/** When the selected note is a best guess, say why and offer the other note. */
+/**
+ * A note hummed between two: say so, and offer the other note. The roll shows what
+ * was hummed; the note that fits the tune better is only ever a suggestion.
+ * (Hums saved by older versions had the app's guess already applied: same bar,
+ * the other way round.)
+ */
 function renderGuess() {
   const n = state.notes[state.selected];
   const box = $('guess');
-  box.hidden = !n?.adjusted;
+  const old = !!n?.adjusted;
+  box.hidden = !old && n?.suggest == null;
   if (box.hidden) return;
-  const name = (m) => midiToName(m, { flats: state.flats });
-  const [lo, hi] = [n.nearest, n.midi].sort((a, b) => a - b);
-  const off = n.cents + (n.midi - n.nearest) * 100; // from the nearest note to what was hummed
-  $('guess-text').innerHTML = `Best guess: <b>${name(n.midi)}</b>. You hummed between ${name(lo)} and ${name(hi)}, ${Math.abs(off)}¢ ${off > 0 ? 'above' : 'below'} ${name(n.nearest)}. ${name(n.midi)} fits the key and the notes around it better.<span class="small">Your answer teaches the app how you sing (saved on this device only).</span>`;
-  $('guess-keep').textContent = `Keep ${name(n.midi)}`;
-  $('guess-undo').textContent = `Use ${name(n.nearest)}`;
+  const name = (m) => midiToName(m, { flats: state.flats }).replace('#', '♯').replace(/b(?=\d)/, '♭');
+  const shift = state.octave * 12;
+  const other = old ? n.nearest : n.suggest + shift;
+  const off = Math.abs(n.cents);
+  const side = n.cents > 0 ? 'above' : 'below';
+  if (old) {
+    $('guess-text').innerHTML = `An earlier version of Surilo moved this note to <b>${name(n.midi)}</b> because it fits the key. You hummed closer to ${name(other)}.`;
+    $('guess-keep').textContent = `Keep ${name(n.midi)}`;
+    $('guess-undo').textContent = `Use ${name(other)}, as hummed`;
+  } else {
+    $('guess-text').innerHTML = `You hummed this one between two notes: ${off}¢ ${side} <b>${name(n.midi)}</b>, so that's what is shown. ${name(other)} would fit the key and the notes around it better. Only switch if that's the note you meant.`;
+    $('guess-keep').textContent = `Keep ${name(n.midi)}`;
+    $('guess-undo').textContent = `Switch to ${name(other)}`;
+  }
 }
 
 function renderAll() {
@@ -243,8 +246,8 @@ function renderAll() {
   renderJourney();
   renderTrace();
   const has = state.notes.length > 0;
-  for (const id of ['play-notes', 'play-chords', 'midi']) $(id).disabled = !has;
-  $('play-hum').disabled = !state.recording;
+  $('midi').disabled = !has;
+  renderPlayer();
   renderHumFile();
   renderTestKit();
   scheduleSave(); // every change to a kept hum is saved (after a short pause)
@@ -362,6 +365,9 @@ function renderMoods() {
   const box = $('moods');
   state.cards = {};
   if (!state.home || !state.notes.length) { box.innerHTML = ''; return; }
+  // Nine harmonisations: only worth doing while the Chords section is on screen.
+  if (view !== 'chords') { moodsStale = true; return; }
+  moodsStale = false;
   const part = state.stripSel;
   box.innerHTML = MOODS.map((m) => {
     const vs = harmonise(state.notes, { home: state.home, slots: state.slots, journey: m.id });
@@ -390,6 +396,8 @@ function onMoodAction(e) {
   const mood = moodById(btn.dataset.id);
   if (!mood) return;
   if (btn.dataset.act === 'hear') {
+    if (state.playing === 'card' && state.playingCard === mood.id) { stopPlayback(); return; }
+    state.playingCard = mood.id;
     playMelody(state.cards[mood.id], 'card');
     setStatus(`Playing your melody in ${mood.name}. The notes are the same: only the chords changed.`);
   } else if (btn.dataset.act === 'use') {
@@ -398,7 +406,9 @@ function onMoodAction(e) {
     } else {
       Object.assign(state, { moodId: mood.id, journeyId: 'steady', strip: null });
       derive(); renderAll();
-      setStatus(`Chords now follow ${mood.name}. Your notes haven't changed. Tap ▶ With chords to hear it.`);
+      state.playKind = 'chords';
+      renderPlayer();
+      setStatus(`Chords now follow ${mood.name}. Your notes haven't changed. Tap ▶ Listen to hear it.`);
     }
   } else if (btn.dataset.act === 'again') {
     state.versions[mood.id] = (state.versions[mood.id] || 0) + 1;
@@ -463,7 +473,9 @@ function initStrip() {
     state.versions.journey = 0;
     derive(); renderAll();
     const j = journeyById(state.journeyId);
-    setStatus(j.moods ? `${j.name}: ${j.about} Tap ▶ With chords to hear it.` : `One mood all the way through: ${state.mood.name}.`);
+    state.playKind = 'chords';
+    renderPlayer();
+    setStatus(j.moods ? `${j.name}: ${j.about} Tap ▶ Listen to hear it.` : `One mood all the way through: ${state.mood.name}.`);
   });
   $('journey-again').addEventListener('click', () => {
     const k = versionKey();
@@ -629,9 +641,11 @@ function initTheme() {
 
 const VIEWS = ['hum', 'notes', 'chords', 'play'];
 let view = 'hum';
+let moodsStale = true; // the mood cards need working out again when Chords next opens
 
 function showView(name) {
   view = name;
+  document.body.dataset.view = name;
   document.querySelectorAll('#tabs [data-view]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.view === name)));
   for (const v of VIEWS) $(`view-${v}`).hidden = v !== name;
   window.scrollTo(0, 0);
@@ -639,20 +653,50 @@ function showView(name) {
   if (name === 'hum') renderTrace();
   if (name === 'notes') renderRoll();
   if (name === 'play') renderInstrument(); // the staff wraps to the width it has
-  if (name === 'chords') $('moods').querySelector('.mood.on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  if (name === 'chords') {
+    if (moodsStale) { renderMoods(); renderPlayer(); }
+    $('moods').querySelector('.mood.on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }
 }
 
 // ---------- Playback bar ----------
 
-const PLAY_LABELS = { notes: '▶ Notes', chords: '▶ With chords', hum: '▶ My hum' };
-/** Light up the button that's playing (it becomes Stop); null when nothing plays. */
+/** The one playback button: ▶ Listen, or ■ Stop while anything is playing. */
+function renderPlayer() {
+  const has = state.notes.length > 0;
+  if (state.playKind === 'hum' && !state.recording) state.playKind = 'notes';
+  document.querySelectorAll('#play-what [data-play]').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.play === state.playKind));
+    b.disabled = b.dataset.play === 'hum' ? !state.recording : !has;
+  });
+  const go = $('play-go');
+  go.classList.toggle('playing', !!state.playing);
+  go.textContent = state.playing ? '■ Stop' : '▶ Listen';
+  go.disabled = !state.playing && (state.playKind === 'hum' ? !state.recording : !has);
+  // A mood card that's playing turns its own ▶ Hear into ■ Stop.
+  document.querySelectorAll('#moods [data-act="hear"]').forEach((b) => {
+    b.textContent = state.playing === 'card' && state.playingCard === b.dataset.id ? '■ Stop' : '▶ Hear';
+  });
+}
+
+/** Mark what's playing (null when nothing is). */
 function setPlaying(kind) {
   state.playing = kind;
-  document.querySelectorAll('#player [data-play]').forEach((b) => {
-    const on = b.dataset.play === kind;
-    b.classList.toggle('playing', on);
-    b.textContent = on ? '■ Stop' : PLAY_LABELS[b.dataset.play];
-  });
+  if (kind !== 'card') state.playingCard = null;
+  renderPlayer();
+}
+
+/** Play what ▶ Listen is set to. */
+function listen() {
+  if (state.mic) return; // never while humming: the mic would hear it
+  if (state.playKind === 'hum') {
+    if (!state.recording) return;
+    playRecording(state.recording, { onTick: tick, onEnd: () => setPlaying(null) });
+    state.playMap = null;
+    setPlaying('hum');
+  } else {
+    playMelody(state.playKind === 'chords' ? state.progression : null);
+  }
 }
 
 // ---------- Actions ----------
@@ -662,43 +706,72 @@ async function toggleRecording() {
   stopPlayback();
   saveNow(); // the open hum's last changes, before the live notes replace it
   const beat = recSetup.mode; // 'off', 'countin' or 'throughout'
-  // Off, but humming along to the metronome card: remember the tempo for test hums, as before.
-  state.recTempo = beat === 'off' && metro.metronome?.running ? { bpm: metro.bpm, sig: metro.sig } : null;
-  if (beat !== 'off') metro.stop(); // its clicks would clash with the count-in
+  // "Hear this tempo" would be picked up by the mic and read as notes: it stops for every take.
+  // (To hum along to a click, that's what Keep clicking is for: it knows where the clicks are.)
+  metro.stop();
+  state.recTempo = null;
   setStatus('Asking for your microphone…');
   try {
-    let lastRender = 0;
-    state.frames = [];
-    let peakInput = 0;
-    const startedAt = performance.now();
+    const frames = [];
+    const live = createLiveNotes({ autoTune: false });
+    let peakInput = 0, input = 0, last = null, fresh = false, drawn = 0, warned = false;
+    let quietFrom = performance.now();
     // One audio clock for the mic and the clicks, so the hum can be lined up with the beat.
+    // Frames only pile up here (about 86 a second); the screen is drawn from them below.
     state.mic = await startMic((f) => {
-      state.frames.push(f);
-      showLive(f);
+      frames.push(f);
+      last = f; input = f.input; fresh = true;
       peakInput = Math.max(peakInput, f.input);
-      showInputLevel(f.input);
-      if (performance.now() - startedAt > 3000 && peakInput < 0.002) {
-        setStatus(`The mic is hardly picking anything up (${state.mic?.label}). Check that this is the microphone you're using, and that its input volume isn't muted or very low.`, true);
-      }
-      const now = performance.now();
-      if (now - lastRender > 120) {
-        lastRender = now;
-        const { notes, tuning } = transcribe(state.frames, { trust: state.trust });
-        state.detected = notes; state.tuning = tuning;
-        derive();
-        renderTrace();
-        renderFacts();
-        renderBlocks();
-      }
     }, { ctx: getCtx() });
     leaveHum();
+    // A clean slate: the hum before this one (its notes, beat and chords) leaves the screen.
+    Object.assign(state, {
+      frames, detected: [], original: [], tuning: 0, tempo: null, recording: null, selected: null, chordTones: [],
+      homeKey: null, strip: null, stripSel: null, versions: {},
+    });
+    state.history.clear();
+    derive();
+    renderAll();
+    document.body.classList.add('recording');
     $('rec').classList.add('on');
-    $('rec-label').textContent = 'Stop';
+    $('rec-label').textContent = 'Stop humming';
     $('mode-label').textContent = 'Listening';
-    if (beat === 'off') setStatus(`Listening on ${state.mic.label}. Hum one note at a time, then press Stop.`);
+    $('sample').value = '';
+    if (beat === 'off') setStatus(`Listening on ${state.mic.label}. Hum one note at a time, then press Stop humming.`);
     else startTake(beat);
+
+    // Draw once per screen frame while humming: the pitch line, the note name and
+    // the notes so far. Only the stretch since the last silence is worked out again
+    // (createLiveNotes), and nothing else in the app is redrawn until Stop.
+    const mic = state.mic;
+    const draw = () => {
+      if (state.mic !== mic) return;
+      requestAnimationFrame(draw);
+      if (!fresh) return;
+      fresh = false;
+      showLive(last);
+      showInputLevel(input);
+      // You're meant to be silent during the count-in, so the mic check starts after it.
+      if (state.countingIn) { quietFrom = performance.now(); peakInput = 0; }
+      if (!warned && performance.now() - quietFrom > 3000 && peakInput < 0.002) {
+        warned = true;
+        setStatus(`The mic is hardly picking anything up (${mic.label}). Check that this is the microphone you're using, and that its input volume isn't muted or very low.`, true);
+      }
+      // The count-in is only clicks: nothing before bar 1 (less half a beat) is a note.
+      const take = state.take;
+      if (take && mic.startedAt != null) {
+        const from = take.m.barOneAt - mic.startedAt - secondsPerBeat(take.bpm, take.sig) / 2;
+        for (let i = drawn; i < frames.length; i++) if (frames[i].t < from) frames[i].midi = null;
+      }
+      drawn = frames.length;
+      const { notes, tuning } = finishNotes(live.update(frames).notes);
+      state.detected = notes; state.tuning = tuning;
+      renderTrace();
+    };
+    requestAnimationFrame(draw);
   } catch (err) {
     state.mic = null;
+    document.body.classList.remove('recording');
     const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
     setStatus(
       inArtifact || err.message === 'no-mic-api'
@@ -737,7 +810,7 @@ function startTake(mode) {
         $('live').classList.remove('counting');
         $('live-name').textContent = 'Hum!';
         $('live-hz').textContent = 'the dots keep the beat';
-        setStatus(`Hum now${mode === 'countin' ? ': the clicks stop, and the dots keep the beat' : ''}. Press Stop when you're done.`);
+        setStatus(`Hum now${mode === 'countin' ? ': the clicks stop, and the dots keep the beat' : ''}. Press Stop humming when you're done.`);
       }
     },
   });
@@ -772,6 +845,7 @@ function stopRecording() {
   }
   showInputLevel(0);
   state.mic = null;
+  document.body.classList.remove('recording');
   $('rec').classList.remove('on');
   $('rec-label').textContent = 'Start humming';
   $('mode-label').textContent = 'Your hum';
@@ -803,19 +877,23 @@ function analyseRecording(rec, label, { quiet = false, keepAs = null } = {}) {
     const tempo = rec.tempo || null;
     if (clicked(tempo) && rec.samples.length / rec.sampleRate < tempo.origin + 0.2) {
       setStatus('You stopped during the count-in. Press Start humming, wait for the clicks, then hum from beat 1.', true);
+      state.frames = [];
+      renderAll();
       return;
     }
-    const frames = analyseBuffer(rec.samples, rec.sampleRate);
+    // A live take was analysed while it was hummed; a file is analysed now.
+    const frames = rec.frames || analyseBuffer(rec.samples, rec.sampleRate);
+    delete rec.frames;
     const mask = skipCountIn(frames, tempo);
     setAnalysis({ frames, recording: rec, mask, tempo });
     const n = state.notes.length;
-    const guesses = state.notes.filter((x) => x.adjusted).length;
+    const between = state.notes.filter((x) => x.suggest != null).length;
     if (n) {
       const first = keepAs && myHums.usable && !myHums.count;
       if (keepAs) keepHum(keepAs);
       if (quiet) return;
       showView('notes');
-      setStatus(`Found ${n} note${n === 1 ? '' : 's'} in ${label}.${guesses ? ` ${guesses === 1 ? 'One was' : `${guesses} were`} between two notes, so I picked the one that fits the tune (dashed, marked ≈). Tap it to check.` : ''}${timingNote()}${first ? ' Your hums are kept in My hums, on the Hum tab, with your edits.' : ''}`);
+      setStatus(`Found ${n} note${n === 1 ? '' : 's'} in ${label}.${between ? ` ${between === 1 ? 'One landed' : `${between} landed`} between two notes (dashed, marked ≈): shown as you hummed ${between === 1 ? 'it' : 'them'}. Tap ${between === 1 ? 'it' : 'one'} to see the other note.` : ''}${timingNote()}${first ? ' Your hums are kept in My hums, on the Hum tab, with your edits.' : ''}`);
       return;
     }
     // Explain *why* nothing was found, so it's clear whether it's the mic or the hum.
@@ -916,7 +994,7 @@ const tick = (i, t) => {
  */
 function playable(progression) {
   const r = state.rhythm, t = state.tempo;
-  if (!r) return { notes: state.notes, progression, clicks: null, toHum: null };
+  if (!r) return { notes: state.notes, progression, clicks: null, toHum: null, beat: null };
   const per = stepsPerBeat(t.sig);
   const eighth = secondsPerBeat(t.bpm, t.sig) / per;
   const at = (e) => e * eighth;
@@ -931,14 +1009,19 @@ function playable(progression) {
       clicks.push({ t: at(b * per), level: accentLevel(((b % bpb) + bpb) % bpb, t.sig) });
     }
   }
-  return { notes, progression: prog, clicks, toHum: (x) => t.secondsAt(x / eighth / per) };
+  return { notes, progression: prog, clicks, toHum: (x) => t.secondsAt(x / eighth / per),
+    // The chords are played to the beat: quarter notes, or the six eighths of a 6/8 bar.
+    beat: t.sig === '6/8' ? { pulse: eighth, bar: 6, six: true } : { pulse: eighth * 2, bar: beatsPerBar(t.sig), six: false } };
 }
 
 /** Play the notes, with a progression underneath (or none). */
 function playMelody(progression = null, kind = progression ? 'chords' : 'notes') {
+  if (state.mic) return; // never while humming: the mic would hear it
   const p = playable(progression);
+  // Each mood has its own way of playing its chords (`play`, see FEELS in synth.js).
+  const prog = p.progression && p.progression.map((x) => ({ ...x, play: moodById(x.mood)?.play ?? null }));
   // Starting stops whatever was playing, and that resets the bar, so mark the new one after.
-  playNotes(p.notes, { timbre: state.instrument, progression: p.progression, clicks: p.clicks, onTick: tick, onEnd: () => setPlaying(null) });
+  playNotes(p.notes, { timbre: state.instrument, progression: prog, beat: p.beat, clicks: p.clicks, onTick: tick, onEnd: () => setPlaying(null) });
   state.playingProg = progression;
   state.playMap = p.toHum;
   setPlaying(kind);
@@ -968,7 +1051,7 @@ async function saveTestHum() {
   // Build the file straight away: sharing only works close to the tap.
   const file = testHumFile({
     song, recording: state.recording, original: state.original, corrected: state.detected,
-    tuning: state.tuning, trust: state.trust, source: state.source, mic: state.micLabel, tempo: state.recTempo,
+    tuning: state.tuning, trust: 1, source: state.source, mic: state.micLabel, tempo: state.recTempo,
   });
   const how = await shareOrDownload(file);
   const mb = (file.size / 1e6).toFixed(1);
@@ -1257,14 +1340,13 @@ function applyEdit(edit) {
     case 'add': after = addNote(before, { midi: edit.midi - shift, start: edit.start, end: edit.end }); break;
     case 'split': after = splitNote(before, i); break;
     case 'merge': after = mergeWithNext(before, i); break;
-    case 'guess': after = resolveGuess(before, i, edit.keep); break;
+    case 'guess': after = before[i]?.suggest != null ? useSuggestion(before, i, edit.keep) : resolveGuess(before, i, edit.keep); break;
     case 'reset': after = state.original; break;
     case 'undo': after = state.history.undo() ?? before; break;
     default: return;
   }
   if (after === before) return;
   if (edit.type !== 'undo') state.history.push(before);
-  if (edit.type === 'guess') learnFromAnswer(edit.keep);
   state.detected = after;
 
   // Keep a sensible selection.
@@ -1290,7 +1372,7 @@ function applyEdit(edit) {
     add: () => 'Note added. Drag it into place.',
     split: () => 'Note split in two.',
     merge: () => 'Joined with the next note.',
-    guess: () => (edit.keep ? `Kept ${midiToName(sel.midi, { flats: state.flats })}.` : `Changed to ${midiToName(sel.midi, { flats: state.flats })}, the note closest to what you hummed.`),
+    guess: () => (edit.keep ? `Kept ${midiToName(sel.midi, { flats: state.flats })}.` : `Changed to ${midiToName(sel.midi, { flats: state.flats })}.`),
     reset: () => 'Back to exactly what you hummed.',
     undo: () => 'Undone.',
   }[edit.type];
@@ -1385,21 +1467,21 @@ function init() {
   sel.addEventListener('change', () => loadSample(sel.value));
   $('rec').addEventListener('click', toggleRecording);
   $('file').addEventListener('change', onFile);
-  // Each playback button starts its sound, or stops it if it's the one playing.
-  const playButton = (kind, start) => $(`play-${kind}`).addEventListener('click', () => (state.playing === kind ? stopPlayback() : start()));
-  playButton('notes', () => playMelody());
-  playButton('chords', () => playMelody(state.progression));
-  playButton('hum', () => {
-    if (!state.recording) return;
-    playRecording(state.recording, { onTick: tick, onEnd: () => setPlaying(null) });
-    state.playMap = null;
-    setPlaying('hum');
+  // One playback button: it plays what's chosen beside it, or stops whatever is playing.
+  $('play-go').addEventListener('click', () => (state.playing ? stopPlayback() : listen()));
+  $('play-what').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-play]');
+    if (!b || b.disabled) return;
+    state.playKind = b.dataset.play;
+    renderPlayer();
+    // Switching while something plays carries straight on with the new choice.
+    if (state.playing) listen();
   });
   $('tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (b) showView(b.dataset.view); });
   $('context').addEventListener('click', () => showView('chords'));
   $('status').addEventListener('click', () => { $('status').hidden = true; });
-  // The metronome's floating pill takes you back to the metronome, on the Hum section.
-  $('metro-mini-show').addEventListener('click', () => { showView('hum'); $('metro').scrollIntoView({ block: 'start' }); });
+  // The floating tempo pill takes you back to the tempo settings, on the Hum section.
+  $('metro-mini-show').addEventListener('click', () => { showView('hum'); recSetup.show(); });
   $('midi').addEventListener('click', saveMidi);
   $('hum-file').addEventListener('click', () => saveHumFile());
   // Downloads started by the page are blocked inside a Claude artifact; MIDI export is for the hosted version.
@@ -1445,6 +1527,7 @@ function init() {
   $('note-chords').addEventListener('click', onChord);
 
   window.addEventListener('resize', () => { renderTrace(); renderRoll(); });
+  document.body.dataset.view = view;
   loadSample('Ode to Joy', { quiet: true });
   sel.value = 'Ode to Joy';
 }

@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 Binamra Bhusal
-// The Metronome card: big BPM with − / + (hold to repeat), a slider, tap tempo,
-// time signature, sound and accent toggles, and a row of beat dots. While it's
-// running and its dots have scrolled away, a small pill at the top of the screen
-// keeps the dots and a Stop button in view.
+// The tempo controls, inside the "Beat" setup under the record button: BPM with
+// − / + (hold to repeat), a slider, tap tempo, time signature, and "Hear this
+// tempo" (a plain metronome, with a row of beat dots). While it's clicking and its
+// dots have scrolled away, a small pill at the top of the screen keeps the dots
+// and a "Stop the click" button in view. Nothing here says just Start or Stop:
+// those words belong to the record button.
 //
 // Settings are remembered on this device (localStorage, if allowed).
 
@@ -11,20 +13,17 @@ import { createMetronome } from '../audio/metronome.js';
 import { tapTempo, beatsPerBar, clampBpm, MIN_BPM, MAX_BPM, TAP_RESET_MS } from '../core/rhythm.js';
 
 const STORE = 'hum-to-notes.metronome';
-const isPhone = () => typeof matchMedia === 'function' && matchMedia('(max-width: 720px)').matches;
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const calm = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 function load() {
-  const d = { bpm: 90, sig: '4/4', sound: true, accent: true, open: !isPhone() };
+  const d = { bpm: 90, sig: '4/4', accent: true };
   try {
     const s = JSON.parse(localStorage.getItem(STORE) || '{}');
     return {
       bpm: Number.isFinite(s.bpm) ? clampBpm(s.bpm) : d.bpm,
       sig: ['4/4', '3/4', '6/8'].includes(s.sig) ? s.sig : d.sig,
-      sound: typeof s.sound === 'boolean' ? s.sound : d.sound,
       accent: typeof s.accent === 'boolean' ? s.accent : d.accent,
-      open: typeof s.open === 'boolean' ? s.open : d.open,
     };
   } catch { return d; }
 }
@@ -72,31 +71,21 @@ export function createMetronomePanel({ getCtx }) {
     $('bpm-val').textContent = s.bpm;
     $('bpm-slider').value = s.bpm;
     $('metro-mini-bpm').textContent = s.bpm;
-    $('metro-sum').textContent = `${s.bpm} BPM · ${s.sig}`;
     $('bpm-unit').textContent = s.sig === '6/8' ? 'big beats per minute' : 'beats per minute';
     $('bpm-down').disabled = s.bpm <= MIN_BPM;
     $('bpm-up').disabled = s.bpm >= MAX_BPM;
-    document.querySelectorAll('[data-sig]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.sig === s.sig)));
-    $('metro-sound').setAttribute('aria-pressed', String(s.sound));
-    $('metro-sound').textContent = s.sound ? 'Sound on' : 'Sound off';
+    document.querySelectorAll('#metro-sig [data-sig]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.sig === s.sig)));
     $('metro-accent').setAttribute('aria-pressed', String(s.accent));
     const hints = [];
     if (s.sig === '6/8') hints.push('In 6/8 the BPM counts the two big beats in each bar, not all six clicks.');
-    if (m?.running && s.sound && isIOS()) hints.push('Can\'t hear it? Turn off silent mode on your iPhone.');
-    if (m?.running && !s.sound) hints.push('Sound is off. Follow the dots.');
+    if (m?.running && isIOS()) hints.push('Can\'t hear it? Turn off silent mode on your iPhone.');
     $('metro-hint').textContent = hints.join(' ');
     $('metro-hint').hidden = !hints.length;
   }
 
-  function drawOpen() {
-    $('metro-body').hidden = !s.open;
-    $('metro-toggle').setAttribute('aria-expanded', String(s.open));
-    $('metro-toggle').setAttribute('aria-label', s.open ? 'Hide the metronome settings' : 'Change the tempo');
-  }
-
   function drawRunning() {
     const on = !!m?.running;
-    $('metro-go').textContent = on ? 'Stop' : 'Start';
+    $('metro-go').textContent = on ? 'Stop the click' : 'Hear this tempo';
     $('metro-go').setAttribute('aria-pressed', String(on));
     $('metro').classList.toggle('running', on);
     $('metro-mini').hidden = !on || cardVisible;
@@ -110,7 +99,7 @@ export function createMetronomePanel({ getCtx }) {
     Object.assign(s, change);
     s.bpm = clampBpm(s.bpm);
     if (sigChanged) drawDots();
-    m?.set({ bpm: s.bpm, sig: s.sig, sound: s.sound, accent: s.accent });
+    m?.set({ bpm: s.bpm, sig: s.sig, sound: true, accent: s.accent });
     drawSettings();
     save();
     for (const fn of listeners) fn(s);
@@ -119,7 +108,7 @@ export function createMetronomePanel({ getCtx }) {
   function toggle() {
     if (m?.running) { m.stop(); drawRunning(); return; }
     m ??= createMetronome(getCtx());
-    m.start({ bpm: s.bpm, sig: s.sig, sound: s.sound, accent: s.accent, onBeat: light });
+    m.start({ bpm: s.bpm, sig: s.sig, sound: true, accent: s.accent, onBeat: light });
     drawRunning();
   }
 
@@ -164,15 +153,12 @@ export function createMetronomePanel({ getCtx }) {
   // ---- Wiring ----
   $('metro-go').addEventListener('click', toggle);
   $('metro-mini-stop').addEventListener('click', toggle);
-  $('metro-mini-show').addEventListener('click', () => $('metro').scrollIntoView({ behavior: calm() ? 'auto' : 'smooth', block: 'start' }));
-  $('metro-toggle').addEventListener('click', () => { s.open = !s.open; drawOpen(); save(); });
   holdToRepeat($('bpm-down'), -1);
   holdToRepeat($('bpm-up'), 1);
   $('bpm-slider').addEventListener('input', (e) => update({ bpm: Number(e.target.value) }));
   $('tap').addEventListener('pointerdown', onTap);
   $('tap').addEventListener('click', onTap);
-  document.querySelectorAll('[data-sig]').forEach((b) => b.addEventListener('click', () => update({ sig: b.dataset.sig })));
-  $('metro-sound').addEventListener('click', () => update({ sound: !s.sound }));
+  document.querySelectorAll('#metro-sig [data-sig]').forEach((b) => b.addEventListener('click', () => update({ sig: b.dataset.sig })));
   $('metro-accent').addEventListener('click', () => update({ accent: !s.accent }));
 
   if (typeof IntersectionObserver === 'function') {
@@ -183,7 +169,6 @@ export function createMetronomePanel({ getCtx }) {
   }
 
   drawDots();
-  drawOpen();
   drawRunning();
 
   return {
@@ -191,8 +176,7 @@ export function createMetronomePanel({ getCtx }) {
     get sig() { return s.sig; },
     get metronome() { return m; },
     stop() { if (m?.running) { m.stop(); drawRunning(); } },
-    /** Show the tempo settings (used by the recording setup's tempo button). */
-    open() { s.open = true; drawOpen(); save(); $('metro').scrollIntoView({ block: 'start' }); },
+    get running() { return !!m?.running; },
     /** Hear about tempo or time-signature changes. */
     onChange(fn) { listeners.push(fn); },
   };

@@ -38,7 +38,7 @@ const SHORT = { semitone: 'semi', octave: 'oct', wrong: 'wrong', split: 'split',
 
 const rows = [];
 const skipped = [];
-const total = { hums: 0, exact: 0, anyKey: 0, notes: 0, right: 0, rightThen: 0, extra: 0, ...Object.fromEntries(KINDS.map((k) => [k, 0])) };
+const total = { hums: 0, exact: 0, anyKey: 0, notes: 0, right: 0, inKey: 0, rightThen: 0, extra: 0, ...Object.fromEntries(KINDS.map((k) => [k, 0])) };
 
 for (const path of files) {
   let wav;
@@ -50,12 +50,16 @@ for (const path of files) {
   const frames = analyseBuffer(wav.samples, wav.sampleRate);
   const { notes } = transcribe(frames);
   const now = compareNotes(meta.corrected, notes);
+  // A singer about 50 cents off could have meant either key, so also count the notes right
+  // when the whole answer key is read a semitone up or down.
+  const inKey = Math.max(now.right, ...[-1, 1].map((sh) => compareNotes(meta.corrected.map((n) => ({ ...n, midi: n.midi + sh })), notes).right));
   const then = compareNotes(meta.corrected, meta.detected || []);
-  rows.push({ path, meta, now, then });
+  rows.push({ path, meta, now, then, inKey });
 
   total.hums++;
   total.notes += now.total;
   total.right += now.right;
+  total.inKey += inKey;
   total.rightThen += then.right;
   total.extra += now.extra.length;
   if (now.exact) total.exact++;
@@ -70,16 +74,16 @@ if (!rows.length) {
   const errCols = Object.keys(SHORT);
   console.log(`\n${rows.length} test hum${rows.length === 1 ? '' : 's'} in ${folder}`);
   console.log('right = notes exactly right with the current code · then = what the app found when you saved it\n');
-  console.log(`${'hum'.padEnd(W)}${'notes'.padStart(6)}${'right'.padStart(7)}${'then'.padStart(6)} ${errCols.map((k) => SHORT[k].padStart(6)).join('')}${'extra'.padStart(7)}`);
-  const line = (label, notes, right, then, counts, extra) => console.log(
-    `${label.slice(0, W - 1).padEnd(W)}${String(notes).padStart(6)}${pct(right, notes).padStart(7)}${pct(then, notes).padStart(6)} `
+  console.log(`${'hum'.padEnd(W)}${'notes'.padStart(6)}${'right'.padStart(7)}${'any key'.padStart(9)}${'then'.padStart(6)} ${errCols.map((k) => SHORT[k].padStart(6)).join('')}${'extra'.padStart(7)}`);
+  const line = (label, notes, right, inKey, then, counts, extra) => console.log(
+    `${label.slice(0, W - 1).padEnd(W)}${String(notes).padStart(6)}${pct(right, notes).padStart(7)}${pct(inKey, notes).padStart(9)}${pct(then, notes).padStart(6)} `
     + `${errCols.map((k) => String(counts[k] || '·').padStart(6)).join('')}${String(extra || '·').padStart(7)}`,
   );
   // Worst first, so the hums worth listening to are at the top.
   rows.sort((a, b) => a.now.right / a.now.total - b.now.right / b.now.total);
-  for (const r of rows) line(basename(r.path, '.wav'), r.now.total, r.now.right, r.then.right, r.now.counts, r.now.extra.length);
-  console.log('-'.repeat(W + 19 + errCols.length * 6 + 7));
-  line('all', total.notes, total.right, total.rightThen, total, total.extra);
+  for (const r of rows) line(basename(r.path, '.wav'), r.now.total, r.now.right, r.inKey, r.then.right, r.now.counts, r.now.extra.length);
+  console.log('-'.repeat(W + 28 + errCols.length * 6 + 7));
+  line('all', total.notes, total.right, total.inKey, total.rightThen, total, total.extra);
   console.log(`\nWhole hums exactly right: ${total.exact} of ${total.hums} (${pct(total.exact, total.hums)}). Right, or right apart from the whole hum being a semitone off: ${total.anyKey} of ${total.hums}.`);
   console.log('semi = 1–2 semitones off · oct = octave off · wrong = further off · split = one note found as several · merge = sung into a neighbour · miss = not found · extra = found but not in the answer key');
 

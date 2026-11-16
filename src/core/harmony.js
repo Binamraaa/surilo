@@ -24,6 +24,22 @@ export const CHORD_TYPES = {
   m7: { suffix: 'm7', tones: [0, 3, 7, 10], tensions: [2, 5], colour: [9], avoid: [1, 4] },
   add9: { suffix: 'add9', tones: [0, 2, 4, 7], tensions: [9], colour: [6, 11], avoid: [5] },
   6: { suffix: '6', tones: [0, 4, 7, 9], tensions: [2], colour: [], avoid: [5] },
+  // Richer chords, for the moods that live on them (Jazzy, Bluesy, Floating, Dreamy).
+  // The extension is a chord tone: a melody note on the 9th gets a chord with the 9th in it.
+  9: { suffix: '9', tones: [0, 2, 4, 7, 10], tensions: [9], colour: [], avoid: [5, 11] },
+  13: { suffix: '13', tones: [0, 4, 7, 9, 10], tensions: [2], colour: [], avoid: [5, 11] },
+  '7sus4': { suffix: '7sus4', tones: [0, 5, 7, 10], tensions: [2, 9], colour: [], avoid: [4, 11] },
+  '7s9': { suffix: '7♯9', tones: [0, 3, 4, 7, 10], tensions: [], colour: [8], avoid: [5, 11] },
+  '7b9': { suffix: '7♭9', tones: [0, 1, 4, 7, 10], tensions: [], colour: [3, 8], avoid: [5, 11] },
+  maj9: { suffix: 'maj9', tones: [0, 2, 4, 7, 11], tensions: [9], colour: [6], avoid: [5] },
+  maj7s11: { suffix: 'maj7♯11', tones: [0, 4, 6, 7, 11], tensions: [2, 9], colour: [], avoid: [5] },
+  m9: { suffix: 'm9', tones: [0, 2, 3, 7, 10], tensions: [5], colour: [9], avoid: [1, 4] },
+  m6: { suffix: 'm6', tones: [0, 3, 7, 9], tensions: [2, 5], colour: [], avoid: [1, 4] },
+  madd9: { suffix: 'm(add9)', tones: [0, 2, 3, 7], tensions: [5, 10], colour: [], avoid: [1, 4] },
+  m7b5: { suffix: 'm7♭5', tones: [0, 3, 6, 10], tensions: [5], colour: [8], avoid: [] },
+  dim7: { suffix: '°7', tones: [0, 3, 6, 9], tensions: [], colour: [], avoid: [] },
+  // A power chord has no 3rd, so either 3rd can be sung over it.
+  5: { suffix: '5', tones: [0, 7], tensions: [2, 3, 4, 10], colour: [5, 9], avoid: [1, 6] },
 };
 
 const pcOf = (m) => ((Math.round(m) % 12) + 12) % 12;
@@ -52,7 +68,14 @@ const MAJOR = [0, 2, 4, 5, 7, 9, 11];
 const NUMS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
 const ACC = { '♭': -1, '♯': 1, '': 0 };
 const ROMAN = 'VII|VI|V|IV|III|II|I|vii|vi|v|iv|iii|ii|i';
-const RN = new RegExp(`^([♭♯]?)(${ROMAN})(maj7|7|add9|sus2|sus4|6|°)?(?:/([♭♯]?)([1-7]|${ROMAN}))?$`);
+const EXTS = 'maj7♯11|maj9|maj7|7sus4|7♯9|7♭9|°7|13|9|7|add9|sus2|sus4|6|5|ø|°';
+const RN = new RegExp(`^([♭♯]?)(${ROMAN})(${EXTS})?(?:/([♭♯]?)([1-7]|${ROMAN}))?$`);
+// A suffix on a numeral → the chord type. Lower case makes the plain ones minor: ii7 = m7, i9 = m9, iv6 = m6.
+const EXT_TYPE = {
+  '°': 'dim', '°7': 'dim7', 'ø': 'm7b5', maj7: 'maj7', maj9: 'maj9', 'maj7♯11': 'maj7s11',
+  '7sus4': '7sus4', '7♯9': '7s9', '7♭9': '7b9', 13: '13', sus2: 'sus2', sus4: 'sus4', 5: '5',
+};
+const EXT_BY_CASE = { '': ['maj', 'min'], 7: ['7', 'm7'], 9: ['9', 'm9'], 6: ['6', 'm6'], add9: ['add9', 'madd9'] };
 const ROMAN_OF = ['I', '♭II', 'II', '♭III', 'III', 'IV', '♯IV', 'V', '♭VI', 'VI', '♭VII', 'VII'];
 const EXT_OF = { maj: '', min: '', dim: '°', 7: '7', m7: '7', maj7: 'maj7', add9: 'add9', sus2: 'sus2', sus4: 'sus4', 6: '6' };
 
@@ -62,7 +85,7 @@ const degree = (acc, num) => {
 };
 
 /**
- * Read a numeral like 'V7', '♭VII/1' or 'V7/ii' into semitones and a letter step
+ * Read a numeral like 'V7', 'ii9', '♭II7', 'iiø', '♭VII/1' or 'V7/ii' into semitones and a letter step
  * above the home note. `base` is the numeral without its suffix, used to match moves.
  */
 export function parseNumeral(spec) {
@@ -71,7 +94,7 @@ export function parseNumeral(spec) {
   const [, acc, num, ext = '', sAcc, target] = m;
   const minor = num === num.toLowerCase();
   let { d, iv } = degree(acc, num);
-  const type = ext === '°' ? 'dim' : ext === '7' ? (minor ? 'm7' : '7') : ext || (minor ? 'min' : 'maj');
+  const type = EXT_TYPE[ext] ?? EXT_BY_CASE[ext][minor ? 1 : 0];
   let bass = null;
   if (target && /\d/.test(target)) {
     const bd = Number(target) - 1;
@@ -324,6 +347,8 @@ function addLift(notes, sp, list, home) {
 function moveScore(a, b, sp, final, home) {
   const r = recipeFor(sp.mood, home);
   let s = r.moves?.[`${a.base}>${b.base}`] ?? 0;
+  // The same root over the same bass is barely a change (Cadd9 → Csus2): prefer real movement.
+  if (a.root === b.root && (a.bass ?? a.root) === (b.bass ?? b.root)) s -= 0.35;
   // A turnaround into a new mood (only where no pivot fits): a dominant 7th resolving down a fifth.
   if (sp.turnaround && a.type === '7' && (a.root - b.root + 12) % 12 === 7) s += 0.9;
   s += 0.04 * Math.min(3, a.tones.filter((t) => b.tones.includes(t)).length); // smooth voice leading
@@ -338,31 +363,44 @@ function moveScore(a, b, sp, final, home) {
 /**
  * k-best Viterbi over the spans. A state is (candidate, how many times in a row
  * that chord has sounded, up to 3), so holding a chord more than twice can cost
- * extra. Returns the best paths, best first. Deterministic: no randomness.
+ * extra. In a mood that wanders (`wander`), the state also remembers the chord
+ * before, so going straight back to its root (Am → F → Am9) costs: the progression keeps
+ * moving on instead of rocking between two chords. Returns the best paths, best
+ * first. Deterministic: no randomness.
  */
-function bestPaths(cands, spans, home, { perState = 6, keep = 80 } = {}) {
+function bestPaths(cands, spans, home, { perState = 6, keep = 80, beam = 90 } = {}) {
+  const wanders = spans.some((sp) => sp.mood.wander);
   let layer = new Map();
-  cands[0].forEach((c, i) => layer.set(`${i}:1`, { c: i, run: 1, list: [{ score: c.score, back: null }] }));
+  cands[0].forEach((c, i) => layer.set(`${i}:1:`, { c: i, run: 1, before: '', list: [{ score: c.score, back: null }] }));
   for (let s = 1; s < cands.length; s++) {
     const next = new Map();
     const final = s === cands.length - 1;
+    const wander = spans[s].mood.wander || 0;
     for (const st of layer.values()) {
       const a = cands[s - 1][st.c];
       cands[s].forEach((b, i) => {
         const same = a.chord.name === b.chord.name;
         const run = same ? Math.min(3, st.run + 1) : 1;
-        const t = same ? (run >= 3 ? -0.3 : -0.05) : moveScore(a.chord, b.chord, spans[s], final, home);
-        const key = `${i}:${run}`;
+        let t = same ? (run >= 3 ? -0.3 : -0.05) : moveScore(a.chord, b.chord, spans[s], final, home);
+        const moved = a.chord.root !== b.chord.root;
+        if (moved && wander && st.before === b.chord.root) t -= wander;
+        const before = !wanders ? '' : moved ? a.chord.root : st.before;
+        const key = `${i}:${run}:${before}`;
         let dst = next.get(key);
-        if (!dst) next.set(key, (dst = { c: i, run, list: [] }));
+        if (!dst) next.set(key, (dst = { c: i, run, before, list: [] }));
         st.list.forEach((e, rank) => dst.list.push({ score: e.score + t + b.score, back: { st, rank } }));
       });
     }
-    for (const st of next.values()) {
+    let states = [...next.values()];
+    for (const st of states) {
       st.list.sort((x, y) => y.score - x.score);
       st.list.length = Math.min(st.list.length, perState);
     }
-    layer = next;
+    // Remembering the chord before multiplies the states: keep the most promising.
+    if (states.length > beam) {
+      states = states.map((st, k) => ({ st, k })).sort((x, y) => y.st.list[0].score - x.st.list[0].score || x.k - y.k).slice(0, beam).map((x) => x.st);
+    }
+    layer = new Map(states.map((st) => [`${st.c}:${st.run}:${st.before}`, st]));
   }
   const ends = [];
   for (const st of layer.values()) st.list.forEach((e, rank) => ends.push({ score: e.score, st, rank }));
@@ -377,7 +415,11 @@ function bestPaths(cands, spans, home, { perState = 6, keep = 80 } = {}) {
 // ---------- Explanations ----------
 
 const TONE_NAMES = { 0: 'root', 3: '3rd', 4: '3rd', 6: '5th', 7: '5th', 10: '7th', 11: '7th' };
-const ADDED = { add9: { 2: '9th' }, sus2: { 2: '2nd' }, sus4: { 5: '4th' }, 6: { 9: '6th' } };
+const ADDED = {
+  add9: { 2: '9th' }, sus2: { 2: '2nd' }, sus4: { 5: '4th' }, 6: { 9: '6th' },
+  9: { 2: '9th' }, m9: { 2: '9th' }, maj9: { 2: '9th' }, madd9: { 2: '9th' }, 13: { 9: '13th' }, m6: { 9: '6th' },
+  '7sus4': { 5: '4th' }, '7s9': { 3: '♯9th' }, '7b9': { 1: '♭9th' }, maj7s11: { 6: '♯11th' }, dim7: { 9: '7th' },
+};
 const TENSION_NAMES = { 1: '♭9th', 2: '9th', 3: '♯9th', 5: '11th', 6: '♯11th', 9: '6th', 10: '7th', 11: 'major 7th' };
 const COLOUR_WORDS = {
   1: 'a tense colour', 2: 'a softer colour', 3: 'a blue note', 5: 'an open sound', 6: 'a floating colour',

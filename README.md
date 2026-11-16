@@ -14,14 +14,14 @@ Made for beginner and intermediate players who can hum a tune but can't yet find
 
 ## What it does
 
-- **Built for phones.** Four sections, Hum, Notes, Chords and Play, with tabs at the bottom of the screen like an app, and a playback bar (notes, notes with chords, or your own hum) that stays in reach on every section. The top bar shows the key and mood; tap it to change the chords.
-- **Metronome.** Set the tempo with big − / + buttons (hold to keep going), a slider, or by tapping the beat. Choose 4/4, 3/4 or 6/8. Beat 1 is louder, and a row of dots shows where you are in the bar, so you can turn the sound off and follow the dots. It keeps your screen awake while it runs, and a small bar stays at the top of the screen when you scroll down to practise the melody.
+- **Built for phones.** Four sections, Hum, Notes, Chords and Play, with tabs at the bottom of the screen like an app, and one **▶ Listen** button (notes, notes with chords, or your own voice) in reach wherever there is something to hear. The Hum section has a single button: **Start humming**. The top bar shows the key and mood; tap it to change the chords.
+- **Tempo.** Under the record button, one line shows the beat you'll hum to. Open it to set the tempo with − / + buttons (hold to keep going), a slider, or by tapping the beat, choose 4/4, 3/4 or 6/8, and **Hear this tempo** as a plain metronome with a row of dots.
 - **Hum to a beat.** Choose a tempo, hear a bar of clicks, then hum while the dots keep time (the click goes quiet, so it works on a phone speaker), or keep the click going with headphones. The app lines your notes up with the beat, allows for singing a little late, and follows you if you speed up or slow down.
 - **Live tuner.** Shows the note you're humming right now, plus a needle for how sharp or flat you are.
 - **Note blocks.** Cleans up your hum and turns it into a row of notes. It smooths out vibrato and scoops, ignores breaths, and keeps repeated notes ("da-da") separate.
 - **Fix the notes.** An editable piano roll. Drag a note up or down when you hummed a bit flat or sharp, drag its edges to change its length, and add, split, join or delete notes, with undo. A faint line shows your actual voice. Every other view, playback and the MIDI file follow your edits. On a phone, tap a note to bring up a bottom bar with big Lower/Higher, Shorter/Longer, Split, Join and Delete buttons. Rows get taller and there's a zoom control.
-- **Tuning correction.** Most people hum a little sharp or flat, and drift further as they go. The app follows your tuning through the hum and snaps each note relative to where your voice is at that point.
-- **Best-guess notes.** When you land halfway between two notes, the app picks the one that fits the key and the notes around it, and marks it (dashed, ≈). Tap it to keep the guess or switch to the other note. Your answers tune how much it leans on the key, saved on your device only.
+- **Tuning correction.** Most people hum a little sharp or flat, and drift further as they go. The app finds your tuning as one steady line through the hum and reads each note against it.
+- **What you hummed is what you see.** The app never changes or adds a note. When you land between two notes, it shows the one you were closer to and marks it (dashed, ≈); tap it to see the note that fits the key better, and switch only if that's the one you meant.
 - **Guitar view.** Puts each note on the fretboard in the easiest place to play. A small path-finding step (Viterbi) favours low frets and open strings and keeps your hand from jumping around.
 - **Piano view.** Highlights the hummed notes on a keyboard.
 - **Real rhythm.** Hum to a beat and the notes snap to it: the piano roll shows bars and beats (and drags snap to them), each note block shows its note value, and the staff is written with a time signature, bar lines, note values, beams, ties and rests, wrapping onto new lines on a phone.
@@ -58,7 +58,7 @@ npm test
 
 The tests synthesise realistic hums, with vibrato, scoops into notes, detuning, breath noise and gaps. They check that each sample melody comes back note for note, and they also cover key detection, chord choice, guitar fingering and staff spelling.
 
-For a wider check, `node scripts/sweep.mjs` hums 522 synthetic melodies: steady singers, sloppy ones (each note off by up to ±40 cents, voice drifting by half a semitone) and tunes with notes outside their key. It reports how many come back right. On sloppy singers, best-guess notes take whole melodies right from 71% to 91%, and single notes from 93.8% to 97.9%.
+For a wider check, `node scripts/sweep.mjs` hums 522 synthetic melodies: steady singers, sloppy ones (each note off by up to ±40 cents, voice drifting by half a semitone) and tunes with notes outside their key. It reports how many come back right. On sloppy singers, reading each note against the singer's own tuning takes whole melodies right from 71% to 96%, and single notes from 93.7% to 99.0%, without changing a single note to fit the key.
 
 ## Testing with real voices
 

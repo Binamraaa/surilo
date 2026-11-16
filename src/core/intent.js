@@ -1,14 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 Binamra Bhusal
-// Guess the note the singer meant, not just the nearest one to what they sang.
+// From sung pitches to notes, without guessing for the singer.
 //
-// Rounding to the nearest note fails when a hum lands between two notes. People
-// miss single notes by 30–50 cents and drift flat or sharp as they go. When that
-// happens, the music itself says which note was meant: the key the tune is in, and
-// the fact that melodies mostly move in small steps. So each uncertain note gets
-// two candidates (the notes either side of the pitch). We score every path through
-// them and keep the most likely melody (Viterbi). Notes sung clearly on pitch are
-// never changed.
+// Nobody hums at concert pitch: a voice sits a little sharp or flat, and often
+// sinks or rises slowly as it goes. So the one thing worked out here is the
+// singer's own tuning: a single straight line through the hum (where the voice
+// started, and how far it drifted by the end). Every note is then simply the
+// nearest note to what was sung, measured against that line. Nothing else moves
+// a note.
+//
+// A hum that lands between two notes is still ambiguous, and the tune itself
+// often says which one was meant (the key, and small steps between notes). That
+// reading is worked out too, but only as a suggestion (`suggest`): the roll
+// shows what was hummed, and the other note is one tap away.
 
 import { framesToNotes } from './notes.js';
 import { guessKey } from './theory.js';
@@ -22,43 +26,51 @@ const MINOR = [0, 2, 3, 5, 7, 8, 9, 10, 11];
 const STEP_FREQ = [0.19, 0.16, 0.3, 0.11, 0.09, 0.07, 0.01, 0.04, 0.01, 0.01, 0.005, 0.003, 0.01];
 const stepLogP = (semis) => Math.log(STEP_FREQ[Math.abs(semis)] ?? 0.002);
 
-// Tuned on scripts/sweep.mjs. Following drift does most of the work; the key and
-// step terms only settle notes sung within a few cents of halfway.
 export const INTENT_DEFAULTS = {
-  lockCents: 20,      // notes sung closer than this to a note are left alone
+  lockCents: 20,      // notes sung closer than this to a note get no suggestion
   sigmaCents: 22,     // how far a singer typically misses a note they meant
   keyPenalty: 1.5,    // cost of a note outside the key (mild: tunes do leave their key)
   stepWeight: 0.25,   // how much the size of the step from the last note counts
-  driftNotes: 6,      // follow the singer's tuning over this many notes either side
-  trust: 1,           // learnt per singer: scales how far the music may overrule the pitch
+  maxDrift: 1,        // the voice may sink or rise this many semitones over the hum
+  driftPenalty: 0.02, // a drifting line must fit clearly better than a level one
+  trust: 1,           // scales how far the key and steps count in a suggestion
 };
 
 const wrap = (x) => x - Math.round(x); // to −0.5…+0.5
 
 /**
- * The singer's tuning around each note (in semitones), so slow drift doesn't
- * push later notes over the halfway line. Circular mean of nearby notes'
- * offsets, unwrapped note by note, so a voice can drift by more than half a
- * semitone over a long hum without suddenly reading as the next note.
+ * The singer's tuning as one straight line: `start` semitones off concert pitch at
+ * the first note, `end` at the last. Found by trying every line and keeping the one
+ * the sung pitches sit closest to (long notes count more). A level line wins unless
+ * a drifting one fits clearly better. Tuned on scripts/sweep.mjs and checked on real
+ * hums: following nearby notes instead (as before) ran away on loose singers.
+ * @param {Array<{pitch:number, start:number, end:number}>} notes
+ * @returns {{start:number, end:number, at:(t:number)=>number}}
  */
-export function localTuning(notes, tuning, radius) {
-  // Start from the opening notes (before any drift), on the same side as the whole hum's tuning.
-  let last = null;
-  return notes.map((_, i) => {
-    let x = 0, y = 0;
-    for (let j = Math.max(0, i - radius); j <= Math.min(notes.length - 1, i + radius); j++) {
-      // Leave the note itself out, or a note sung 40 cents sharp would pull its own reference sharp.
-      if (j === i && notes.length > 1) continue;
-      const n = notes[j];
-      const w = Math.min(1, Math.max(0.1, n.end - n.start)) / (1 + Math.abs(i - j) / (radius + 1));
-      const a = 2 * Math.PI * wrap(n.pitch);
-      x += w * Math.cos(a); y += w * Math.sin(a);
+export function steadyTuning(notes, { maxDrift = INTENT_DEFAULTS.maxDrift, driftPenalty = INTENT_DEFAULTS.driftPenalty } = {}) {
+  const level = (a) => ({ start: a, end: a, at: () => a });
+  if (!notes.length) return level(0);
+  const t0 = notes[0].start;
+  const span = notes[notes.length - 1].start - t0;
+  const w = notes.map((n) => Math.min(1, Math.max(0.1, n.end - n.start)));
+  const total = w.reduce((a, b) => a + b, 0);
+  const pos = notes.map((n) => (span > 0 ? (n.start - t0) / span : 0));
+  // Too few notes, or too short a hum, to tell drift from a missed note.
+  const drifts = notes.length >= 6 && span >= 2 ? Math.round(maxDrift / 0.05) : 0;
+  let best = { a: 0, d: 0 }, bestCost = Infinity;
+  for (let k = -drifts; k <= drifts; k++) {
+    const d = k * 0.05;
+    for (let j = -25; j < 25; j++) {
+      const a = j * 0.02;
+      let c = 0;
+      for (let i = 0; i < notes.length; i++) c += w[i] * wrap(notes[i].pitch - a - d * pos[i]) ** 2;
+      // Near a tie, prefer the line closest to concert pitch and the least drift.
+      c = c / total + driftPenalty * Math.abs(d) + 1e-4 * Math.abs(a + d / 2);
+      if (c < bestCost - 1e-12) { bestCost = c; best = { a, d }; }
     }
-    if (Math.hypot(x, y) < 1e-9) return last ?? tuning;
-    const here = Math.atan2(y, x) / (2 * Math.PI);
-    last = last == null ? tuning + wrap(here - tuning) : last + wrap(here - last);
-    return last;
-  });
+  }
+  const { a, d } = best;
+  return { start: a, end: a + d, at: (t) => a + d * (span > 0 ? Math.min(1, Math.max(0, (t - t0) / span)) : 0) };
 }
 
 function inKey(midi, key) {
@@ -68,16 +80,18 @@ function inKey(midi, key) {
 
 /**
  * @param {Array<{pitch:number, start:number, end:number}>} notes  from framesToNotes
- * @param {object} [o]  see INTENT_DEFAULTS, plus `tuning` (the hum's overall offset)
- * @returns {{notes: Array, key: object|null}} each note gains `nearest` (the
- *   note closest to what was sung) and `adjusted` (true when the intended note differs)
+ * @param {object} [o]  see INTENT_DEFAULTS
+ * @returns {{notes: Array, key: object|null, tuning: {start:number, end:number}}}
+ *   each note's `midi` is the note nearest to what was sung (against the singer's
+ *   tuning), `cents` how far off it was. A note sung between two gets `suggest`:
+ *   the other note, when the key and the notes around it point that way.
  */
 export function intendNotes(notes, o = {}) {
-  const { tuning = 0, lockCents, sigmaCents, keyPenalty, stepWeight, driftNotes, trust } = { ...INTENT_DEFAULTS, ...o };
-  if (!notes.length) return { notes: [], key: null };
+  const { lockCents, sigmaCents, keyPenalty, stepWeight, maxDrift, driftPenalty, trust } = { ...INTENT_DEFAULTS, ...o };
+  if (!notes.length) return { notes: [], key: null, tuning: { start: 0, end: 0 } };
 
-  const tunes = localTuning(notes, tuning, driftNotes);
-  const xs = notes.map((n, i) => n.pitch - tunes[i]);
+  const line = steadyTuning(notes, { maxDrift, driftPenalty });
+  const xs = notes.map((n) => n.pitch - line.at(n.start));
   const nearest = xs.map(Math.round);
   // Uncertain notes get both neighbours as candidates; clear ones only their own.
   const cands = xs.map((x) => (Math.abs(wrap(x)) * 100 < lockCents ? [Math.round(x)] : [Math.floor(x), Math.floor(x) + 1]));
@@ -104,28 +118,39 @@ export function intendNotes(notes, o = {}) {
     return prev.reduce((a, b) => (b.score > a.score ? b : a)).path;
   };
 
-  // Guess the key from the plain notes, pick notes, then re-check the key once.
+  // The suggestions: guess the key from the notes as hummed, pick the likeliest
+  // melody, then re-check the key once.
   const asNotes = (midis) => notes.map((n, i) => ({ ...n, midi: midis[i] }));
   let key = guessKey(asNotes(nearest))[0] ?? null;
-  let path = solve(key);
-  const again = guessKey(asNotes(path))[0] ?? null;
-  if (again && key && (again.tonic !== key.tonic || again.mode !== key.mode)) { key = again; path = solve(key); }
+  let path = trust > 0 ? solve(key) : nearest;
+  if (trust > 0) {
+    const again = guessKey(asNotes(path))[0] ?? null;
+    if (again && key && (again.tonic !== key.tonic || again.mode !== key.mode)) { key = again; path = solve(key); }
+  }
 
   return {
     key,
-    notes: notes.map((n, i) => ({
-      ...n,
-      midi: path[i],
-      nearest: nearest[i],
-      adjusted: path[i] !== nearest[i],
-      cents: Math.round((xs[i] - path[i]) * 100),
-    })),
+    tuning: { start: line.start, end: line.end },
+    notes: notes.map((n, i) => {
+      const out = { ...n, midi: nearest[i], cents: Math.round((xs[i] - nearest[i]) * 100) };
+      if (path[i] !== nearest[i]) out.suggest = path[i];
+      return out;
+    }),
   };
 }
 
-/** Frames → notes, with each note set to the one the singer most likely meant. */
+/**
+ * Frames → notes: each one the nearest note to what was sung, against the singer's
+ * own tuning. `tuning` is that tuning's average (semitones off concert pitch), and
+ * `drift` how far it moved from the first note to the last.
+ */
 export function transcribe(frames, opts = {}) {
-  const { notes, tuning } = framesToNotes(frames, opts);
-  const { notes: intended, key } = intendNotes(notes, { ...opts, tuning });
-  return { notes: intended, tuning, key };
+  const { notes } = framesToNotes(frames, { ...opts, autoTune: false });
+  return finishNotes(notes, opts);
+}
+
+/** The same, from notes already segmented (see liveNotes in notes.js). */
+export function finishNotes(rawNotes, opts = {}) {
+  const { notes, key, tuning } = intendNotes(rawNotes, opts);
+  return { notes, key, tuning: (tuning.start + tuning.end) / 2, drift: tuning.end - tuning.start };
 }
